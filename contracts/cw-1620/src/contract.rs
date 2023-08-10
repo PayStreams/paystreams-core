@@ -41,21 +41,25 @@ pub fn execute(
     match msg {
         ExecuteMsg::CreateStream { recipient, deposit, token_addr, start_time, stop_time } => try_create_stream(deps, info, recipient, deposit, token_addr, start_time, stop_time),
         ExecuteMsg::WithdrawFromStream { recipient, amount, denom } => try_withdraw_from_stream(deps, info, env, recipient, amount, denom),
+    
     }
 }
 
 pub fn try_create_stream(deps: DepsMut, info: MessageInfo, recipient: String, deposit: Uint128, token_addr: String, start_time: u64, stop_time: u64) -> Result<Response, ContractError> {
-    
-    let recipient = deps.api.addr_validate(&recipient)?;
+    let recipient = deps.api.addr_validate(&recipient)?; 
     let duration = stop_time.checked_sub(start_time).unwrap_or_else(| | return 0);
     let deposit_amount: Uint128 = info
     .funds
     .iter()
-    .find(|c| c.denom == String::from("uusd"))
+    .find(|c| c.denom == String::from("axlUSDC"))
     .map(|c| Uint128::from(c.amount))
     .unwrap_or_else(Uint128::zero);
     println!("Deposit amount {:?} Other amount {:?}", deposit, deposit_amount);
 
+    // Verify the first fund in funds is a native token and a non zero amount was provided this will be deposit amount. It can be any denom 
+    // match funds[0] {
+
+    // }
     if deposit_amount < deposit {
         return Err(ContractError::NotEnoughAvailableFunds);
     }
@@ -251,10 +255,10 @@ mod tests {
         assert_eq!(0, value.count);
 
         // Create 'payer' user with 1000 USD in balance to act as the payer of the stream
-        let payer = mock_info("payer", &coins(1000, "uusd"));
+        let payer = mock_info("payer", &coins(1000, "axlUSDC"));
 
         // Create 'payee' user with 0 USD in balance to act as the receiver of funds from the stream
-        let payee = mock_info("payee", &coins(0, "uusd"));
+        let payee = mock_info("payee", &coins(0, "axlUSDC"));
 
         let env = mock_env();
 
@@ -265,7 +269,7 @@ mod tests {
             recipient: payee.sender.to_string(),
             start_time: env.block.time.seconds(),
             stop_time: env.block.time.seconds() + 100,
-            token_addr: String::from("uusd")
+            token_addr: String::from("axlUSDC")
         };
 
         // We need this to unwrap as an error
@@ -277,7 +281,7 @@ mod tests {
             recipient: payee.sender.to_string(),
             start_time: env.block.time.seconds(),
             stop_time: env.block.time.seconds() + 100,
-            token_addr: String::from("uusd")
+            token_addr: String::from("axlUSDC")
         };
         // No issue
         let _ = execute(deps.as_mut(), env.clone(), payer.clone(), stream_msg).unwrap();
@@ -310,10 +314,10 @@ mod tests {
         assert_eq!(0, value.count);
 
         // Create 'payer' user with 1000 USD in balance to act as the payer of the stream
-        let payer = mock_info("payer", &coins(100, "uusd"));
+        let payer = mock_info("payer", &coins(100, "axlUSDC"));
 
         // Create 'payee' user with 0 USD in balance to act as the receiver of funds from the stream
-        let payee = mock_info("payee", &coins(0, "uusd"));
+        let payee = mock_info("payee", &coins(0, "axlUSDC"));
 
         let mut env = mock_env();
 
@@ -322,7 +326,7 @@ mod tests {
             recipient: payee.sender.to_string(),
             start_time: env.block.time.seconds(),
             stop_time: env.block.time.seconds() + 100,
-            token_addr: String::from("uusd")
+            token_addr: String::from("axlUSDC")
         };
 
         let execute_res = execute(deps.as_mut(), env.clone(), payer.clone(), stream_msg).unwrap();
@@ -332,7 +336,7 @@ mod tests {
          // Verify the payee cant get all right away
          let withdraw_msg = ExecuteMsg::WithdrawFromStream{
             amount: Uint128::new(90),
-            denom: String::from("uusd"),
+            denom: String::from("axlUSDC"),
             recipient: payee.sender.to_string()
         };
         let execute_res = execute(deps.as_mut(), env.clone(), payer.clone(), withdraw_msg).unwrap_err();
@@ -345,7 +349,7 @@ mod tests {
         env.block.time = Timestamp::from_seconds(env.block.time.seconds()+10);
         let withdraw_msg = ExecuteMsg::WithdrawFromStream{
             amount: Uint128::new(10),
-            denom: String::from("uusd"),
+            denom: String::from("axlUSDC"),
             recipient: payee.sender.to_string()
         };
         let execute_res = execute(deps.as_mut(), env.clone(), payer.clone(), withdraw_msg).unwrap();
@@ -355,7 +359,7 @@ mod tests {
         assert_eq!(execute_res.messages, vec![SubMsg::new(CosmosMsg::Bank(BankMsg::Send {
             to_address: "payee".to_string(),
             amount: vec![Coin {
-                denom: "uusd".to_string(),
+                denom: "axlUSDC".to_string(),
                 amount: Uint128::from(10u128),
             }],
         }))]);
@@ -363,7 +367,7 @@ mod tests {
         // Verify the payee cant get all right away
         let withdraw_msg = ExecuteMsg::WithdrawFromStream{
             amount: Uint128::new(90),
-            denom: String::from("uusd"),
+            denom: String::from("axlUSDC"),
             recipient: payee.sender.to_string()
         };
         let execute_res = execute(deps.as_mut(), env.clone(), payer.clone(), withdraw_msg).unwrap_err();
@@ -378,7 +382,7 @@ mod tests {
         env.block.time = Timestamp::from_seconds(env.block.time.seconds()+90);
         let withdraw_msg = ExecuteMsg::WithdrawFromStream{
             amount: Uint128::new(90),
-            denom: String::from("uusd"),
+            denom: String::from("axlUSDC"),
             recipient: payee.sender.to_string()
         };
         let execute_res = execute(deps.as_mut(), env.clone(), payer.clone(), withdraw_msg).unwrap();
@@ -389,7 +393,7 @@ mod tests {
         assert_eq!(execute_res.messages, vec![SubMsg::new(CosmosMsg::Bank(BankMsg::Send {
             to_address: "payee".to_string(),
             amount: vec![Coin {
-                denom: "uusd".to_string(),
+                denom: "axlUSDC".to_string(),
                 amount: Uint128::from(90u128),
             }],
         }))]);
@@ -399,7 +403,7 @@ mod tests {
         env.block.time = Timestamp::from_seconds(env.block.time.seconds()+51);
         let withdraw_msg = ExecuteMsg::WithdrawFromStream{
             amount: Uint128::new(10),
-            denom: String::from("uusd"),
+            denom: String::from("axlUSDC"),
             recipient: payee.sender.to_string()
         };
         let execute_res = execute(deps.as_mut(), env.clone(), payer, withdraw_msg).unwrap_err();

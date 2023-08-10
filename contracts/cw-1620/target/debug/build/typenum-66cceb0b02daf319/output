@@ -1,2 +1,0 @@
-cargo:rustc-env=TYPENUM_BUILD_CONSTS=/Users/ryan/dev/0xfable/paystreams/paystreams-core/cw-1620/target/debug/build/typenum-66cceb0b02daf319/out/consts.rs
-cargo:rustc-env=TYPENUM_BUILD_OP=/Users/ryan/dev/0xfable/paystreams/paystreams-core/cw-1620/target/debug/build/typenum-66cceb0b02daf319/out/op.rs
