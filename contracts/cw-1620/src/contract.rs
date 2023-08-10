@@ -2,6 +2,7 @@
 use cosmwasm_std::entry_point;
 use cosmwasm_std::{Uint128, CosmosMsg, BankMsg, Coin, to_binary, Binary, Deps, DepsMut, Env, MessageInfo, Response, StdResult, Timestamp};
 use cw2::set_contract_version;
+use cw_utils::{must_pay, may_pay};
 
 use crate::error::ContractError;
 use crate::msg::{LookupStreamResponse, CountResponse, ExecuteMsg, InstantiateMsg, QueryMsg};
@@ -45,21 +46,25 @@ pub fn execute(
     }
 }
 
+// To create a stream we want verify a number of things before saving the stream info and starting some accrual process
+// 1. The recipient is a valid address
+// 2. The deposit is a valid amount
+// 3. The first entry in funds is a native token and the amount is non zero 
+// 4. The start time is before the stop time
+
 pub fn try_create_stream(deps: DepsMut, info: MessageInfo, recipient: String, deposit: Uint128, token_addr: String, start_time: u64, stop_time: u64) -> Result<Response, ContractError> {
     let recipient = deps.api.addr_validate(&recipient)?; 
     let duration = stop_time.checked_sub(start_time).unwrap_or_else(| | return 0);
-    let deposit_amount: Uint128 = info
-    .funds
-    .iter()
-    .find(|c| c.denom == String::from("axlusdc"))
-    .map(|c| Uint128::from(c.amount))
-    .unwrap_or_else(Uint128::zero);
-    println!("Deposit amount {:?} Other amount {:?}", deposit, deposit_amount);
-
-    // Verify the first fund in funds is a native token and a non zero amount was provided this will be deposit amount. It can be any denom 
-    // match funds[0] {
-
-    // }
+    // let deposit_amount: Uint128 = info
+    // .funds
+    // .iter()
+    // .find(|c| c.denom == String::from("axlusdc"))
+    // .map(|c| Uint128::from(c.amount))
+    // .unwrap_or_else(Uint128::zero);
+    // println!("Deposit amount {:?} Other amount {:?}", deposit, deposit_amount);
+    // Ensure the first entry in funds is a native token and the amount is non zero
+    let deposit_amount = may_pay(&info, "axlusdc").unwrap();
+    // To confirm if cw20, we can query the token info, if theres an error its not a cw20, then we can validate the address to ensure its a native token 
     if deposit_amount < deposit {
         return Err(ContractError::NotEnoughAvailableFunds);
     }

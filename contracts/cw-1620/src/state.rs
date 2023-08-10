@@ -1,3 +1,7 @@
+use cw_storage_plus::Index;
+use cw_storage_plus::IndexList;
+use cw_storage_plus::IndexedMap;
+use cw_storage_plus::MultiIndex;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
@@ -32,3 +36,32 @@ pub struct PaymentStream {
 
 pub const STATE: Item<State> = Item::new("state");
 pub const STREAMS: Map<(&Addr, &Addr), PaymentStream> = Map::new("streams");
+// Secondary Indexes for our STREAMS map. 
+// This will enable us to query the map by sender or recipient address instead of needing both 
+pub struct TokenIndexes<'a> {
+    pub sender: MultiIndex<'a, String, PaymentStream, String>,
+    pub recipient: MultiIndex<'a, String, PaymentStream, String>,
+}
+// Setup indexes
+impl<'a> IndexList<PaymentStream> for TokenIndexes<'a> {
+    fn get_indexes(&'_ self) -> Box<dyn Iterator<Item = &'_ dyn Index<PaymentStream>> + '_> {
+        let v: Vec<&dyn Index<PaymentStream>> = vec![&self.sender, &self.recipient];
+        Box::new(v.into_iter())
+    }
+}
+
+pub fn payment_streams<'a>() -> IndexedMap<'a, &'a str, PaymentStream, TokenIndexes<'a>> {
+    let indexes = TokenIndexes {
+        sender: MultiIndex::new(
+            |_pk: &[u8], d: &PaymentStream| d.sender.clone().to_string(),
+            "vesting_contracts",
+            "vesting_contracts__instantiator",
+        ),
+        recipient: MultiIndex::new(
+            |_pk: &[u8], d: &PaymentStream| d.recipient.clone().to_string(),
+            "vesting_contracts",
+            "vesting_contracts__recipient",
+        ),
+    };
+    IndexedMap::new("vesting_contracts", indexes)
+}
