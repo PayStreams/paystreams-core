@@ -51,7 +51,6 @@ pub fn execute(
 // 2. The deposit is a valid amount
 // 3. The first entry in funds is a native token and the amount is non zero 
 // 4. The start time is before the stop time
-
 pub fn try_create_stream(deps: DepsMut, info: MessageInfo, recipient: String, deposit: Uint128, token_addr: String, start_time: u64, stop_time: u64) -> Result<Response, ContractError> {
     let recipient = deps.api.addr_validate(&recipient)?; 
     let duration = stop_time.checked_sub(start_time).unwrap_or_else(| | return 0);

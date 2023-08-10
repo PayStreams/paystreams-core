@@ -21,3 +21,4 @@ cw-utils = { version = "1.0.1" }
 
 [workspace.dev-dependencies]
 cosmwasm-schema = { version = "1.3" }
+cw-multi-test = { version = "0.16.5" }
