@@ -21,7 +21,8 @@
             "payer": {
               "type": "string"
             }
-          }
+          },
+          "additionalProperties": false
         }
       },
       "additionalProperties": false
@@ -33,7 +34,101 @@
       ],
       "properties": {
         "stream_count": {
-          "type": "object"
+          "type": "object",
+          "additionalProperties": false
+        }
+      },
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "required": [
+        "streams_by_payee"
+      ],
+      "properties": {
+        "streams_by_payee": {
+          "type": "object",
+          "required": [
+            "payee"
+          ],
+          "properties": {
+            "limit": {
+              "type": [
+                "integer",
+                "null"
+              ],
+              "format": "uint",
+              "minimum": 0.0
+            },
+            "payee": {
+              "type": "string"
+            },
+            "reverse": {
+              "type": [
+                "boolean",
+                "null"
+              ]
+            }
+          },
+          "additionalProperties": false
+        }
+      },
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "required": [
+        "streams_by_sender"
+      ],
+      "properties": {
+        "streams_by_sender": {
+          "type": "object",
+          "required": [
+            "sender"
+          ],
+          "properties": {
+            "limit": {
+              "type": [
+                "integer",
+                "null"
+              ],
+              "format": "uint",
+              "minimum": 0.0
+            },
+            "reverse": {
+              "type": [
+                "boolean",
+                "null"
+              ]
+            },
+            "sender": {
+              "type": "string"
+            }
+          },
+          "additionalProperties": false
+        }
+      },
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "required": [
+        "streams_by_index"
+      ],
+      "properties": {
+        "streams_by_index": {
+          "type": "object",
+          "required": [
+            "index"
+          ],
+          "properties": {
+            "index": {
+              "type": "integer",
+              "format": "uint64",
+              "minimum": 0.0
+            }
+          },
+          "additionalProperties": false
         }
       },
       "additionalProperties": false
