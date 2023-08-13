@@ -84,7 +84,7 @@ pub fn payment_streams<'a>() -> IndexedMap<'a, &'a str, PaymentStream, TokenInde
         by_index: MultiIndex::new(
             |_pk: &[u8], d: &PaymentStream| d.stream_idx.clone().to_string(),
             "paystream",
-            "paystreams__index",
+            "paystream__index",
         ),
     };
     IndexedMap::new("paystream", indexes)

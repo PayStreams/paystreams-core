@@ -1,6 +1,6 @@
 use crate::state::PaymentStream;
-use cosmwasm_std::{Uint128, Timestamp};
-use cosmwasm_schema::cw_serde;
+use cosmwasm_schema::{cw_serde, QueryResponses};
+use cosmwasm_std::{Timestamp, Uint128};
 
 #[cw_serde]
 pub struct InstantiateMsg {
@@ -26,22 +26,26 @@ pub enum ExecuteMsg {
 }
 
 #[cw_serde]
+#[derive(QueryResponses)]
 pub enum QueryMsg {
-    LookupStream {
-        payer: String,
-        payee: String,
-    },
+    #[returns(LookupStreamResponse)]
+    LookupStream { payer: String, payee: String },
+    #[returns(CountResponse)]
     StreamCount {},
+    #[returns(StreamsResponse)]
     StreamsByPayee {
         payee: String,
         reverse: Option<bool>,
         limit: Option<usize>,
     },
+    #[returns(StreamsResponse)]
     StreamsBySender {
         sender: String,
         reverse: Option<bool>,
         limit: Option<usize>,
     },
+    #[returns(StreamsResponse)]
+    StreamsByIndex { index: u64 },
 }
 
 // We define a custom struct for each query response

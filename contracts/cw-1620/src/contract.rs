@@ -5,7 +5,7 @@ use cosmwasm_std::{
     StdResult, Timestamp, Uint128,
 };
 use cw2::set_contract_version;
-use cw_utils::{may_pay, must_pay};
+use cw_utils::may_pay;
 
 use crate::error::ContractError;
 use crate::msg::{
@@ -17,6 +17,7 @@ use crate::state::{payment_streams, ConfigState, PaymentStream, LAST_STREAM_IDX,
 const CONTRACT_NAME: &str = "crates.io:cw-1620";
 const CONTRACT_VERSION: &str = env!("CARGO_PKG_VERSION");
 const DEFAULT_LIMIT_FOR_QUERY: usize = 10;
+#[allow(unused)]
 const DEFAULT_ORDER_FOR_QUERY: Order = Order::Ascending;
 #[cfg_attr(not(feature = "library"), entry_point)]
 pub fn instantiate(
@@ -82,9 +83,12 @@ pub fn try_create_stream(
     stop_time: Timestamp,
 ) -> Result<Response, ContractError> {
     let recipient = deps.api.addr_validate(&recipient)?;
-    let duration = stop_time.seconds()
+    let duration = stop_time
+        .seconds()
         .checked_sub(start_time.seconds())
-        .unwrap_or_else(|| return 0);
+        .ok_or(ContractError::Unauthorized {})
+        .unwrap();
+
     // let deposit_amount: Uint128 = info
     // .funds
     // .iter()
@@ -102,25 +106,32 @@ pub fn try_create_stream(
 
     let rate_per_second = deposit
         .checked_div(Uint128::from(duration))
-        .unwrap_or_else(|_| return Uint128::zero());
+        .unwrap_or_else(|_| Uint128::zero());
     let stream_data = PaymentStream {
-        stream_idx: stream_idx,
+        stream_idx,
         recipient: recipient.clone(),
         deposit: deposit_amount,
         token_addr: deps.api.addr_validate(&token_addr)?,
-        start_time: start_time,
-        stop_time: stop_time,
+        start_time,
+        stop_time,
         is_entity: false,
-        rate_per_second: rate_per_second,
-        remaining_balance: Uint128::from(deposit_amount),
+        rate_per_second,
+        remaining_balance: deposit_amount,
         sender: info.sender.clone(),
     };
     STATE.update(deps.storage, |mut state| -> Result<_, ContractError> {
         state.count += 1;
         Ok(state)
     })?;
+    payment_streams().save(
+        deps.storage,
+        stream_data.stream_idx.to_string().as_ref(),
+        &stream_data,
+    )?;
+    payment_streams().load(deps.storage, &stream_data.stream_idx.to_string())?;
     STREAMS.save(deps.storage, (&recipient, &info.sender), &stream_data)?;
     LAST_STREAM_IDX.save(deps.storage, &stream_idx)?;
+    println!("Stream created: {:?}", stream_data);
     Ok(Response::new().add_attribute("method", "try_create_stream"))
 }
 
@@ -139,25 +150,17 @@ pub fn try_withdraw_from_stream(
     if amount == Uint128::zero() {
         return Err(ContractError::InvalidAmount {});
     }
-
+    // let stream = payment_streams().load(deps.storage, &stream_idx.to_string())?;
     let mut paystream: PaymentStream = if let Some(stream_idx) = stream_idx {
-        payment_streams()
-            .idx
-            .by_index
-            .prefix(stream_idx.to_string())
-            .range(deps.storage, None, None, DEFAULT_ORDER_FOR_QUERY)
-            .take(DEFAULT_LIMIT_FOR_QUERY)
-            .flat_map(|vc| Ok::<PaymentStream, ContractError>(vc?.1))
-            .collect::<Vec<PaymentStream>>()
-            .pop()
-            .unwrap()
+        payment_streams().load(deps.storage, &stream_idx.to_string())?
     } else {
         STREAMS.load(deps.storage, (&recipient, &info.sender))?
     };
 
+    println!("Stream {:?}", paystream);
+
     // Check it doesn't exceed available
-    let balance: Uint128 =
-        balance_of(paystream.clone(), env).unwrap_or_else(|_| return Uint128::zero());
+    let balance: Uint128 = balance_of(paystream.clone(), env).unwrap_or_else(|_| Uint128::zero());
     println!(
         "Amount {:?} Balance: {:?} Remaining from stream {:?}",
         amount, balance, paystream.remaining_balance
@@ -173,14 +176,18 @@ pub fn try_withdraw_from_stream(
     // Make the payout happen
     let payout_msg: CosmosMsg = CosmosMsg::Bank(BankMsg::Send {
         to_address: recipient.to_string(),
-        amount: vec![Coin {
-            denom: denom,
-            amount: amount,
-        }],
+        amount: vec![Coin { denom, amount }],
     });
-
+    println!("Remaining balance {:?}", paystream.remaining_balance);
     paystream.remaining_balance = paystream.remaining_balance.checked_sub(amount)?;
+    println!("Remaining balance {:?}", paystream.remaining_balance);
+
     STREAMS.save(deps.storage, (&recipient, &info.sender), &paystream)?;
+    payment_streams().save(
+        deps.storage,
+        paystream.stream_idx.to_string().as_ref(),
+        &paystream,
+    )?;
 
     Ok(Response::new()
         .add_attribute("method", "try_withdraw_from_stream")
@@ -201,7 +208,7 @@ pub fn balance_of(stream: PaymentStream, env: Env) -> StdResult<Uint128> {
         // println!("New balance {:?}", new_balance);
         return Ok(new_balance);
     }
-    return Ok(Uint128::from(0u128));
+    Ok(Uint128::from(0u128))
 }
 
 pub fn delta(stream: PaymentStream, env: Env) -> StdResult<u64> {
@@ -219,8 +226,9 @@ pub fn delta(stream: PaymentStream, env: Env) -> StdResult<u64> {
         .stop_time
         .seconds()
         .checked_sub(stream.start_time.seconds())
-        .unwrap_or_else(|| return 0);
-    return Ok(Timestamp::from_seconds(duration).seconds());
+        .ok_or(ContractError::Unauthorized {})
+        .unwrap();
+    Ok(Timestamp::from_seconds(duration).seconds())
 }
 
 #[cfg_attr(not(feature = "library"), entry_point)]
@@ -252,6 +260,7 @@ pub fn query(deps: Deps, _env: Env, msg: QueryMsg) -> StdResult<Binary> {
 
             to_binary(&query_streams_by_sender(deps, sender, order, limit)?)
         }
+        QueryMsg::StreamsByIndex { index } => to_binary(&query_stream_by_index(deps, index)?),
     }
 }
 
@@ -285,7 +294,7 @@ pub fn query_streams_by_payee(
         .flat_map(|vc| Ok::<PaymentStream, ContractError>(vc?.1))
         .collect();
 
-    Ok(StreamsResponse { streams: streams })
+    Ok(StreamsResponse { streams })
 }
 
 pub fn query_streams_by_sender(
@@ -305,7 +314,17 @@ pub fn query_streams_by_sender(
         .flat_map(|vc| Ok::<PaymentStream, ContractError>(vc?.1))
         .collect();
 
-    Ok(StreamsResponse { streams: streams })
+    println!("Querying by sender {:?}", streams);
+
+    Ok(StreamsResponse { streams })
+}
+
+pub fn query_stream_by_index(deps: Deps, stream_idx: u64) -> StdResult<StreamsResponse> {
+    // Get 1 from payment_streams
+    let stream = payment_streams().load(deps.storage, &stream_idx.to_string())?;
+    Ok(StreamsResponse {
+        streams: vec![stream],
+    })
 }
 
 // TODO: Add more queries for streams information such as
