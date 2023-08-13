@@ -50,6 +50,7 @@ thiserror = { version = "1.0.26" }
 cw-utils = { version = "1.0.1"}
 cw20-base = { version = "1.0", package = "cw20-base", features = ["library"] }
 white-whale.workspace = true
+cosmwasm-schema.workspace = true
 
 [dev-dependencies]
 cosmwasm-schema = { version = "1.0.1" }

@@ -78,12 +78,12 @@ pub fn try_create_stream(
     recipient: String,
     deposit: Uint128,
     token_addr: String,
-    start_time: u64,
-    stop_time: u64,
+    start_time: Timestamp,
+    stop_time: Timestamp,
 ) -> Result<Response, ContractError> {
     let recipient = deps.api.addr_validate(&recipient)?;
-    let duration = stop_time
-        .checked_sub(start_time)
+    let duration = stop_time.seconds()
+        .checked_sub(start_time.seconds())
         .unwrap_or_else(|| return 0);
     // let deposit_amount: Uint128 = info
     // .funds
@@ -108,8 +108,8 @@ pub fn try_create_stream(
         recipient: recipient.clone(),
         deposit: deposit_amount,
         token_addr: deps.api.addr_validate(&token_addr)?,
-        start_time: Timestamp::from_seconds(start_time),
-        stop_time: Timestamp::from_seconds(stop_time),
+        start_time: start_time,
+        stop_time: stop_time,
         is_entity: false,
         rate_per_second: rate_per_second,
         remaining_balance: Uint128::from(deposit_amount),
@@ -363,8 +363,8 @@ mod tests {
         let stream_msg = ExecuteMsg::CreateStream {
             deposit: Uint128::new(100),
             recipient: payee.sender.to_string(),
-            start_time: env.block.time.seconds(),
-            stop_time: env.block.time.seconds() + 100,
+            start_time: env.block.time,
+            stop_time: env.block.time.plus_seconds(100),
             token_addr: String::from("axlusdc"),
         };
 
@@ -407,8 +407,8 @@ mod tests {
         let stream_msg = ExecuteMsg::CreateStream {
             deposit: Uint128::new(1001),
             recipient: payee.sender.to_string(),
-            start_time: env.block.time.seconds(),
-            stop_time: env.block.time.seconds() + 100,
+            start_time: env.block.time,
+            stop_time: env.block.time.plus_seconds(100),
             token_addr: String::from("axlusdc"),
         };
 
@@ -419,8 +419,8 @@ mod tests {
         let stream_msg = ExecuteMsg::CreateStream {
             deposit: Uint128::new(1000),
             recipient: payee.sender.to_string(),
-            start_time: env.block.time.seconds(),
-            stop_time: env.block.time.seconds() + 100,
+            start_time: env.block.time,
+            stop_time: env.block.time.plus_seconds(100),
             token_addr: String::from("axlusdc"),
         };
         // No issue
@@ -463,8 +463,8 @@ mod tests {
         let stream_msg = ExecuteMsg::CreateStream {
             deposit: Uint128::new(100),
             recipient: payee.sender.to_string(),
-            start_time: env.block.time.seconds(),
-            stop_time: env.block.time.seconds() + 100,
+            start_time: env.block.time,
+            stop_time: env.block.time.plus_seconds(100),
             token_addr: String::from("axlusdc"),
         };
 
