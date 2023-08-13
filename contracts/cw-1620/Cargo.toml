@@ -49,6 +49,7 @@ serde = { version = "1.0.127", default-features = false, features = ["derive"] }
 thiserror = { version = "1.0.26" }
 cw-utils = { version = "1.0.1"}
 cw20-base = { version = "1.0", package = "cw20-base", features = ["library"] }
+white-whale.workspace = true
 
 [dev-dependencies]
 cosmwasm-schema = { version = "1.0.1" }

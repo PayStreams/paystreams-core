@@ -1,9 +1,3 @@
+mod payment_tests {}
 
-
-mod payment_tests {
-
-}
-
-mod recipient_tests {
-
-}
+mod recipient_tests {}

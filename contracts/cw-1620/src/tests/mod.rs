@@ -1,2 +1,2 @@
-pub mod suite;
 pub mod payment;
+pub mod suite;

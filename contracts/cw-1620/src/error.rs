@@ -1,4 +1,4 @@
-use cosmwasm_std::{StdError, OverflowError};
+use cosmwasm_std::{OverflowError, StdError};
 use thiserror::Error;
 
 #[derive(Error, Debug)]
@@ -19,7 +19,10 @@ pub enum ContractError {
     NotEnoughAvailableBalance {},
 
     #[error("Not Enough Funds Available to Withdraw")]
-    NotEnoughAvailableFunds
+    NotEnoughAvailableFunds {},
+
+    #[error("Could not find a stream with provided index or address")]
+    StreamNotFound {},
     // Add any other custom errors you like here.
     // Look at https://docs.rs/thiserror/1.0.21/thiserror/ for details.
 }

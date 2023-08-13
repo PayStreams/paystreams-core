@@ -1,14 +1,38 @@
 {
   "$schema": "http://json-schema.org/draft-07/schema#",
   "title": "QueryMsg",
-  "anyOf": [
+  "oneOf": [
     {
       "type": "object",
       "required": [
-        "get_count"
+        "lookup_stream"
       ],
       "properties": {
-        "get_count": {
+        "lookup_stream": {
+          "type": "object",
+          "required": [
+            "payee",
+            "payer"
+          ],
+          "properties": {
+            "payee": {
+              "type": "string"
+            },
+            "payer": {
+              "type": "string"
+            }
+          }
+        }
+      },
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "required": [
+        "stream_count"
+      ],
+      "properties": {
+        "stream_count": {
           "type": "object"
         }
       },
