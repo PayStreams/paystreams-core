@@ -56,21 +56,21 @@ pub const STREAMS: Map<(&Addr, &Addr), PaymentStream> = Map::new("streams");
 pub const LAST_STREAM_IDX: Item<u64> = Item::new("last_stream_idx");
 // Secondary Indexes for our STREAMS map.
 // This will enable us to query the map by sender or recipient address instead of needing both
-pub struct TokenIndexes<'a> {
+pub struct StreamSecondaryIndexes<'a> {
     pub sender: MultiIndex<'a, String, PaymentStream, String>,
     pub recipient: MultiIndex<'a, String, PaymentStream, String>,
     pub by_index: MultiIndex<'a, String, PaymentStream, u64>,
 }
 // Setup indexes
-impl<'a> IndexList<PaymentStream> for TokenIndexes<'a> {
+impl<'a> IndexList<PaymentStream> for StreamSecondaryIndexes<'a> {
     fn get_indexes(&'_ self) -> Box<dyn Iterator<Item = &'_ dyn Index<PaymentStream>> + '_> {
         let v: Vec<&dyn Index<PaymentStream>> = vec![&self.sender, &self.recipient, &self.by_index];
         Box::new(v.into_iter())
     }
 }
 
-pub fn payment_streams<'a>() -> IndexedMap<'a, &'a str, PaymentStream, TokenIndexes<'a>> {
-    let indexes = TokenIndexes {
+pub fn payment_streams<'a>() -> IndexedMap<'a, &'a str, PaymentStream, StreamSecondaryIndexes<'a>> {
+    let indexes = StreamSecondaryIndexes {
         sender: MultiIndex::new(
             |_pk: &[u8], d: &PaymentStream| d.sender.clone().to_string(),
             "paystream",
