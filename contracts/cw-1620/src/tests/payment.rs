@@ -34,6 +34,8 @@ mod basic_use_cases {
                     denom: "ibc/something/axlusdc".to_string(),
                     amount: Uint128::from(100u128),
                 }],
+                None,
+                None,
             )
             .unwrap();
 
@@ -171,6 +173,8 @@ mod basic_use_cases {
                         denom: "ibc/something/axlusdc".to_string(),
                         amount: Uint128::from(100u128),
                     }],
+                    None,
+                    None,
                 )
                 .unwrap();
         }
@@ -263,6 +267,8 @@ mod views_with_mock_data {
                         denom: "ibc/something/axlusdc".to_string(),
                         amount: Uint128::from(100u128),
                     }],
+                    None,
+                    None,
                 )
                 .unwrap();
         }
@@ -303,6 +309,8 @@ mod views_with_mock_data {
                         denom: "ibc/something/axlusdc".to_string(),
                         amount: Uint128::from(100u128),
                     }],
+                    None,
+                    None,
                 )
                 .unwrap();
         }
@@ -359,6 +367,8 @@ mod views_with_mock_data {
                         denom: "ibc/something/axlusdc".to_string(),
                         amount: Uint128::from(100u128),
                     }],
+                    None,
+                    None,
                 )
                 .unwrap();
         }
@@ -376,6 +386,8 @@ mod views_with_mock_data {
                     denom: "ibc/something/axlusdc".to_string(),
                     amount: Uint128::from(100u128),
                 }],
+                None,
+                None,
             )
             .unwrap();
 
@@ -437,6 +449,8 @@ mod views_with_mock_data {
                         denom: "ibc/something/axlusdc".to_string(),
                         amount: Uint128::from(100u128),
                     }],
+                    None,
+                    None,
                 )
                 .unwrap();
             // Now query the stream by index and save it to all_streams vec for later
@@ -468,6 +482,8 @@ mod views_with_mock_data {
                     denom: "ibc/something/axlusdc".to_string(),
                     amount: Uint128::from(100u128),
                 }],
+                None,
+                None,
             )
             .unwrap();
 
@@ -493,5 +509,123 @@ mod views_with_mock_data {
             .streams;
         assert_eq!(streams.len(), 4);
         assert_eq!(streams, all_streams);
+    }
+}
+
+mod curve_tests {
+    use cosmwasm_std::{Addr, Coin, Uint128};
+    use wynd_utils::Curve;
+
+    use crate::{state::StreamType, tests::suite::SuiteBuilder};
+
+    #[test]
+    fn test_linear_curve() {
+        let funder = Addr::unchecked("funder");
+        let alice = Addr::unchecked("alice");
+        let bob = Addr::unchecked("bob");
+        let charlie = Addr::unchecked("charlie");
+        let recipients = vec![alice, bob, charlie];
+        let mut suite = SuiteBuilder::new()
+            .with_funds(
+                &funder.to_string(),
+                &[Coin {
+                    denom: "ibc/something/axlusdc".to_string(),
+                    amount: Uint128::from(1000000000u128),
+                }],
+            )
+            .build();
+
+        //                Some(Curve::saturating_linear((suite.get_time_as_timestamp().seconds(), 0u128), (suite.get_time_as_timestamp().seconds()+100, 100u128))),
+
+        // Create a stream with a linear curve
+        suite
+            .create_stream(
+                funder.clone(),
+                recipients[0].clone(),
+                100u128,
+                "ibc/something/axlusdc",
+                suite.get_time_as_timestamp(),
+                suite.get_time_as_timestamp().plus_seconds(100),
+                &[Coin {
+                    denom: "ibc/something/axlusdc".to_string(),
+                    amount: Uint128::from(100u128),
+                }],
+                Some(StreamType::LinearCurveBased),
+                Some(Curve::saturating_linear(
+                    (suite.get_time_as_timestamp().seconds(), 0u128),
+                    (suite.get_time_as_timestamp().seconds() + 100, 100u128),
+                )),
+            )
+            .unwrap();
+
+        // Advance time 20% of the way through the streams
+        suite.update_time(20);
+
+        // Verify that the recipient has withdrawn something
+        let created_stream = suite.query_stream_by_index(1u64).unwrap().streams.pop();
+
+        match created_stream {
+            Some(stream) => {
+                assert_eq!(stream.recipient, recipients[0].to_string());
+                assert_eq!(stream.sender, funder.to_string());
+                assert_eq!(stream.deposit, Uint128::from(100u128));
+                assert_eq!(stream.token_addr, "ibc/something/axlusdc".to_string());
+                assert_eq!(stream.remaining_balance, Uint128::from(100u128));
+            }
+            None => {
+                panic!("Stream was not created");
+            }
+        }
+
+        // Advance time 20% of the way through the streams
+        suite.update_time(20);
+
+        // Attempt to withdraw
+        suite
+            .withdraw_from_stream(
+                recipients[0].clone(),
+                20u128,
+                "ibc/something/axlusdc",
+                Some(1u64),
+            )
+            .unwrap();
+
+        // Verify that the recipient has withdrawn something
+
+        let created_stream = suite.query_stream_by_index(1u64).unwrap().streams.pop();
+
+        match created_stream {
+            Some(stream) => {
+                assert_eq!(stream.recipient, recipients[0].to_string());
+                assert_eq!(stream.sender, funder.to_string());
+                assert_eq!(stream.deposit, Uint128::from(100u128));
+                assert_eq!(stream.token_addr, "ibc/something/axlusdc".to_string());
+                assert_eq!(stream.remaining_balance, Uint128::from(80u128));
+            }
+            None => {
+                panic!("Stream was not created");
+            }
+        }
+
+        // Advance time 20% of the way through the streams
+
+        suite.update_time(20);
+
+        // Attempt to withdraw
+
+        suite
+            .withdraw_from_stream(
+                recipients[0].clone(),
+                20u128,
+                "ibc/something/axlusdc",
+                Some(1u64),
+            )
+            .unwrap();
+
+        // Verify the balance of recipient is 40
+        let balance = suite
+            .query_balance(&recipients[0].clone().to_string(), "ibc/something/axlusdc")
+            .unwrap();
+        assert_eq!(balance, 40u128);
     }
 }

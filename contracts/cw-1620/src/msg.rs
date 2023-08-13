@@ -1,6 +1,7 @@
-use crate::state::PaymentStream;
+use crate::state::{PaymentStream, StreamType};
 use cosmwasm_schema::{cw_serde, QueryResponses};
 use cosmwasm_std::{Timestamp, Uint128};
+use wynd_utils::Curve;
 
 #[cw_serde]
 pub struct InstantiateMsg {
@@ -16,6 +17,8 @@ pub enum ExecuteMsg {
         token_addr: String,
         start_time: Timestamp,
         stop_time: Timestamp,
+        stream_type: Option<StreamType>,
+        curve: Option<Curve>,
     },
     WithdrawFromStream {
         recipient: String,

@@ -1,8 +1,9 @@
 use anyhow::Result as AnyResult;
 use cosmwasm_std::{Addr, Coin, StdResult, Timestamp};
 use cw_multi_test::{App, AppResponse, ContractWrapper, Executor};
+use wynd_utils::Curve;
 
-use crate::msg::StreamsResponse;
+use crate::{msg::StreamsResponse, state::StreamType};
 pub fn store_streaming_contract(app: &mut App) -> u64 {
     let contract = Box::new(
         ContractWrapper::new_with_empty(
@@ -121,6 +122,8 @@ impl Suite {
         start_time: Timestamp,
         stop_time: Timestamp,
         funds: &[Coin],
+        stream_type: Option<StreamType>,
+        curve: Option<Curve>,
     ) -> AnyResult<AppResponse> {
         let msg = crate::msg::ExecuteMsg::CreateStream {
             recipient: recipient.to_string(),
@@ -128,6 +131,8 @@ impl Suite {
             token_addr: token_addr.to_string(),
             start_time: start_time,
             stop_time: stop_time,
+            stream_type: stream_type,
+            curve: curve,
         };
 
         self.app

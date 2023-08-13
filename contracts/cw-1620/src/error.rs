@@ -1,5 +1,6 @@
 use cosmwasm_std::{OverflowError, StdError};
 use thiserror::Error;
+use wynd_utils::CurveError;
 
 #[derive(Error, Debug, PartialEq)]
 pub enum ContractError {
@@ -8,6 +9,9 @@ pub enum ContractError {
 
     #[error("{0}")]
     OverflowError(#[from] OverflowError),
+
+    #[error("{0}")]
+    Curve(#[from] CurveError),
 
     #[error("Unauthorized")]
     Unauthorized {},

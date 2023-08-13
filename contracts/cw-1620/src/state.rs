@@ -1,3 +1,4 @@
+use cosmwasm_schema::cw_serde;
 use cosmwasm_std::Decimal;
 use cosmwasm_std::Timestamp;
 // TODO: Consider using our own impl of Asset derived from WW and other implementations
@@ -12,6 +13,7 @@ use white_whale::pool_network::asset::Asset;
 use cosmwasm_std::{Addr, Uint128};
 use cw_storage_plus::Item;
 use cw_storage_plus::Map;
+use wynd_utils::Curve;
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
 pub struct ConfigState {
@@ -32,6 +34,19 @@ impl Default for ConfigState {
     }
 }
 
+#[cw_serde]
+/// All the different types of payment streams we can create
+/// Not all types are supported as of yet but these are all the possible types
+/// Note DynamicCurveBased can be used to create almost any type of payment curve and is for very advanced use cases
+pub enum StreamType {
+    Basic,
+    LinearCurveBased,
+    CliffCurveBased,
+    DynamicCurveBased,
+    ExponentialCurveBased,
+    ExponentialCurveBasedWithCliff,
+    TraditionalUnlockStepCurve,
+}
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
 // A PaymentStream is a State Object which contains the details for a Payment Stream between two parties
 // Parties in this case being recipient and sender addresses
@@ -47,6 +62,15 @@ pub struct PaymentStream {
     pub sender: Addr,
     pub token_addr: Addr,
     pub is_entity: bool,
+    pub curve: Option<Curve>,
+}
+
+#[cw_serde]
+pub struct StreamData {
+    pub start_time: Timestamp,
+    pub stop_time: Timestamp,
+    pub stream_type: Option<StreamType>,
+    pub curve: Option<Curve>,
 }
 
 pub const STATE: Item<ConfigState> = Item::new("state");

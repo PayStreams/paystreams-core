@@ -228,6 +228,7 @@ dependencies = [
  "serde",
  "thiserror",
  "white-whale",
+ "wynd-utils",
 ]
 
 [[package]]
@@ -934,6 +935,18 @@ dependencies = [
  "schemars",
  "serde",
  "uint",
+]
+
+[[package]]
+name = "wynd-utils"
+version = "0.4.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "daa37b3fba808df599acc6f0d7523b465baf47a0b0361867c4f1635eb53f72aa"
+dependencies = [
+ "cosmwasm-std",
+ "schemars",
+ "serde",
+ "thiserror",
 ]
 
 [[package]]
