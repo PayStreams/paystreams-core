@@ -37,6 +37,16 @@
               "token_addr"
             ],
             "properties": {
+              "curve": {
+                "anyOf": [
+                  {
+                    "$ref": "#/definitions/Curve"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
               "deposit": {
                 "$ref": "#/definitions/Uint128"
               },
@@ -48,6 +58,16 @@
               },
               "stop_time": {
                 "$ref": "#/definitions/Timestamp"
+              },
+              "stream_type": {
+                "anyOf": [
+                  {
+                    "$ref": "#/definitions/StreamType"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
               },
               "token_addr": {
                 "type": "string"
@@ -97,6 +117,122 @@
       }
     ],
     "definitions": {
+      "Curve": {
+        "oneOf": [
+          {
+            "type": "object",
+            "required": [
+              "constant"
+            ],
+            "properties": {
+              "constant": {
+                "type": "object",
+                "required": [
+                  "y"
+                ],
+                "properties": {
+                  "y": {
+                    "$ref": "#/definitions/Uint128"
+                  }
+                }
+              }
+            },
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "required": [
+              "saturating_linear"
+            ],
+            "properties": {
+              "saturating_linear": {
+                "$ref": "#/definitions/SaturatingLinear"
+              }
+            },
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "required": [
+              "piecewise_linear"
+            ],
+            "properties": {
+              "piecewise_linear": {
+                "$ref": "#/definitions/PiecewiseLinear"
+              }
+            },
+            "additionalProperties": false
+          }
+        ]
+      },
+      "PiecewiseLinear": {
+        "description": "This is a generalization of SaturatingLinear, steps must be arranged with increasing time (u64). Any point before first step gets the first value, after last step the last value. Otherwise, it is a linear interpolation between the two closest points. Vec of length 1 -> Constant Vec of length 2 -> SaturatingLinear",
+        "type": "object",
+        "required": [
+          "steps"
+        ],
+        "properties": {
+          "steps": {
+            "type": "array",
+            "items": {
+              "type": "array",
+              "items": [
+                {
+                  "type": "integer",
+                  "format": "uint64",
+                  "minimum": 0.0
+                },
+                {
+                  "$ref": "#/definitions/Uint128"
+                }
+              ],
+              "maxItems": 2,
+              "minItems": 2
+            }
+          }
+        }
+      },
+      "SaturatingLinear": {
+        "description": "min_y for all x <= min_x, max_y for all x >= max_x, linear in between",
+        "type": "object",
+        "required": [
+          "max_x",
+          "max_y",
+          "min_x",
+          "min_y"
+        ],
+        "properties": {
+          "max_x": {
+            "type": "integer",
+            "format": "uint64",
+            "minimum": 0.0
+          },
+          "max_y": {
+            "$ref": "#/definitions/Uint128"
+          },
+          "min_x": {
+            "type": "integer",
+            "format": "uint64",
+            "minimum": 0.0
+          },
+          "min_y": {
+            "$ref": "#/definitions/Uint128"
+          }
+        }
+      },
+      "StreamType": {
+        "description": "All the different types of payment streams we can create Not all types are supported as of yet but these are all the possible types Note DynamicCurveBased can be used to create almost any type of payment curve and is for very advanced use cases",
+        "type": "string",
+        "enum": [
+          "basic",
+          "linear_curve_based",
+          "cliff_curve_based",
+          "dynamic_curve_based",
+          "exponential_curve_based",
+          "exponential_curve_based_with_cliff",
+          "traditional_unlock_step_curve"
+        ]
+      },
       "Timestamp": {
         "description": "A point in time in nanosecond precision.\n\nThis type can represent times from 1970-01-01T00:00:00Z to 2554-07-21T23:34:33Z.\n\n## Examples\n\n``` # use cosmwasm_std::Timestamp; let ts = Timestamp::from_nanos(1_000_000_202); assert_eq!(ts.nanos(), 1_000_000_202); assert_eq!(ts.seconds(), 1); assert_eq!(ts.subsec_nanos(), 202);\n\nlet ts = ts.plus_seconds(2); assert_eq!(ts.nanos(), 3_000_000_202); assert_eq!(ts.seconds(), 3); assert_eq!(ts.subsec_nanos(), 202); ```",
         "allOf": [
@@ -273,6 +409,54 @@
           "description": "A human readable address.\n\nIn Cosmos, this is typically bech32 encoded. But for multi-chain smart contracts no assumptions should be made other than being UTF-8 encoded and of reasonable length.\n\nThis type represents a validated address. It can be created in the following ways 1. Use `Addr::unchecked(input)` 2. Use `let checked: Addr = deps.api.addr_validate(input)?` 3. Use `let checked: Addr = deps.api.addr_humanize(canonical_addr)?` 4. Deserialize from JSON. This must only be done from JSON that was validated before such as a contract's state. `Addr` must not be used in messages sent by the user because this would result in unvalidated instances.\n\nThis type is immutable. If you really need to mutate it (Really? Are you sure?), create a mutable copy using `let mut mutable = Addr::to_string()` and operate on that `String` instance.",
           "type": "string"
         },
+        "Curve": {
+          "oneOf": [
+            {
+              "type": "object",
+              "required": [
+                "constant"
+              ],
+              "properties": {
+                "constant": {
+                  "type": "object",
+                  "required": [
+                    "y"
+                  ],
+                  "properties": {
+                    "y": {
+                      "$ref": "#/definitions/Uint128"
+                    }
+                  }
+                }
+              },
+              "additionalProperties": false
+            },
+            {
+              "type": "object",
+              "required": [
+                "saturating_linear"
+              ],
+              "properties": {
+                "saturating_linear": {
+                  "$ref": "#/definitions/SaturatingLinear"
+                }
+              },
+              "additionalProperties": false
+            },
+            {
+              "type": "object",
+              "required": [
+                "piecewise_linear"
+              ],
+              "properties": {
+                "piecewise_linear": {
+                  "$ref": "#/definitions/PiecewiseLinear"
+                }
+              },
+              "additionalProperties": false
+            }
+          ]
+        },
         "PaymentStream": {
           "type": "object",
           "required": [
@@ -288,6 +472,16 @@
             "token_addr"
           ],
           "properties": {
+            "curve": {
+              "anyOf": [
+                {
+                  "$ref": "#/definitions/Curve"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
             "deposit": {
               "$ref": "#/definitions/Uint128"
             },
@@ -319,6 +513,61 @@
             },
             "token_addr": {
               "$ref": "#/definitions/Addr"
+            }
+          }
+        },
+        "PiecewiseLinear": {
+          "description": "This is a generalization of SaturatingLinear, steps must be arranged with increasing time (u64). Any point before first step gets the first value, after last step the last value. Otherwise, it is a linear interpolation between the two closest points. Vec of length 1 -> Constant Vec of length 2 -> SaturatingLinear",
+          "type": "object",
+          "required": [
+            "steps"
+          ],
+          "properties": {
+            "steps": {
+              "type": "array",
+              "items": {
+                "type": "array",
+                "items": [
+                  {
+                    "type": "integer",
+                    "format": "uint64",
+                    "minimum": 0.0
+                  },
+                  {
+                    "$ref": "#/definitions/Uint128"
+                  }
+                ],
+                "maxItems": 2,
+                "minItems": 2
+              }
+            }
+          }
+        },
+        "SaturatingLinear": {
+          "description": "min_y for all x <= min_x, max_y for all x >= max_x, linear in between",
+          "type": "object",
+          "required": [
+            "max_x",
+            "max_y",
+            "min_x",
+            "min_y"
+          ],
+          "properties": {
+            "max_x": {
+              "type": "integer",
+              "format": "uint64",
+              "minimum": 0.0
+            },
+            "max_y": {
+              "$ref": "#/definitions/Uint128"
+            },
+            "min_x": {
+              "type": "integer",
+              "format": "uint64",
+              "minimum": 0.0
+            },
+            "min_y": {
+              "$ref": "#/definitions/Uint128"
             }
           }
         },
@@ -376,6 +625,54 @@
           "description": "A human readable address.\n\nIn Cosmos, this is typically bech32 encoded. But for multi-chain smart contracts no assumptions should be made other than being UTF-8 encoded and of reasonable length.\n\nThis type represents a validated address. It can be created in the following ways 1. Use `Addr::unchecked(input)` 2. Use `let checked: Addr = deps.api.addr_validate(input)?` 3. Use `let checked: Addr = deps.api.addr_humanize(canonical_addr)?` 4. Deserialize from JSON. This must only be done from JSON that was validated before such as a contract's state. `Addr` must not be used in messages sent by the user because this would result in unvalidated instances.\n\nThis type is immutable. If you really need to mutate it (Really? Are you sure?), create a mutable copy using `let mut mutable = Addr::to_string()` and operate on that `String` instance.",
           "type": "string"
         },
+        "Curve": {
+          "oneOf": [
+            {
+              "type": "object",
+              "required": [
+                "constant"
+              ],
+              "properties": {
+                "constant": {
+                  "type": "object",
+                  "required": [
+                    "y"
+                  ],
+                  "properties": {
+                    "y": {
+                      "$ref": "#/definitions/Uint128"
+                    }
+                  }
+                }
+              },
+              "additionalProperties": false
+            },
+            {
+              "type": "object",
+              "required": [
+                "saturating_linear"
+              ],
+              "properties": {
+                "saturating_linear": {
+                  "$ref": "#/definitions/SaturatingLinear"
+                }
+              },
+              "additionalProperties": false
+            },
+            {
+              "type": "object",
+              "required": [
+                "piecewise_linear"
+              ],
+              "properties": {
+                "piecewise_linear": {
+                  "$ref": "#/definitions/PiecewiseLinear"
+                }
+              },
+              "additionalProperties": false
+            }
+          ]
+        },
         "PaymentStream": {
           "type": "object",
           "required": [
@@ -391,6 +688,16 @@
             "token_addr"
           ],
           "properties": {
+            "curve": {
+              "anyOf": [
+                {
+                  "$ref": "#/definitions/Curve"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
             "deposit": {
               "$ref": "#/definitions/Uint128"
             },
@@ -422,6 +729,61 @@
             },
             "token_addr": {
               "$ref": "#/definitions/Addr"
+            }
+          }
+        },
+        "PiecewiseLinear": {
+          "description": "This is a generalization of SaturatingLinear, steps must be arranged with increasing time (u64). Any point before first step gets the first value, after last step the last value. Otherwise, it is a linear interpolation between the two closest points. Vec of length 1 -> Constant Vec of length 2 -> SaturatingLinear",
+          "type": "object",
+          "required": [
+            "steps"
+          ],
+          "properties": {
+            "steps": {
+              "type": "array",
+              "items": {
+                "type": "array",
+                "items": [
+                  {
+                    "type": "integer",
+                    "format": "uint64",
+                    "minimum": 0.0
+                  },
+                  {
+                    "$ref": "#/definitions/Uint128"
+                  }
+                ],
+                "maxItems": 2,
+                "minItems": 2
+              }
+            }
+          }
+        },
+        "SaturatingLinear": {
+          "description": "min_y for all x <= min_x, max_y for all x >= max_x, linear in between",
+          "type": "object",
+          "required": [
+            "max_x",
+            "max_y",
+            "min_x",
+            "min_y"
+          ],
+          "properties": {
+            "max_x": {
+              "type": "integer",
+              "format": "uint64",
+              "minimum": 0.0
+            },
+            "max_y": {
+              "$ref": "#/definitions/Uint128"
+            },
+            "min_x": {
+              "type": "integer",
+              "format": "uint64",
+              "minimum": 0.0
+            },
+            "min_y": {
+              "$ref": "#/definitions/Uint128"
             }
           }
         },
@@ -464,6 +826,54 @@
           "description": "A human readable address.\n\nIn Cosmos, this is typically bech32 encoded. But for multi-chain smart contracts no assumptions should be made other than being UTF-8 encoded and of reasonable length.\n\nThis type represents a validated address. It can be created in the following ways 1. Use `Addr::unchecked(input)` 2. Use `let checked: Addr = deps.api.addr_validate(input)?` 3. Use `let checked: Addr = deps.api.addr_humanize(canonical_addr)?` 4. Deserialize from JSON. This must only be done from JSON that was validated before such as a contract's state. `Addr` must not be used in messages sent by the user because this would result in unvalidated instances.\n\nThis type is immutable. If you really need to mutate it (Really? Are you sure?), create a mutable copy using `let mut mutable = Addr::to_string()` and operate on that `String` instance.",
           "type": "string"
         },
+        "Curve": {
+          "oneOf": [
+            {
+              "type": "object",
+              "required": [
+                "constant"
+              ],
+              "properties": {
+                "constant": {
+                  "type": "object",
+                  "required": [
+                    "y"
+                  ],
+                  "properties": {
+                    "y": {
+                      "$ref": "#/definitions/Uint128"
+                    }
+                  }
+                }
+              },
+              "additionalProperties": false
+            },
+            {
+              "type": "object",
+              "required": [
+                "saturating_linear"
+              ],
+              "properties": {
+                "saturating_linear": {
+                  "$ref": "#/definitions/SaturatingLinear"
+                }
+              },
+              "additionalProperties": false
+            },
+            {
+              "type": "object",
+              "required": [
+                "piecewise_linear"
+              ],
+              "properties": {
+                "piecewise_linear": {
+                  "$ref": "#/definitions/PiecewiseLinear"
+                }
+              },
+              "additionalProperties": false
+            }
+          ]
+        },
         "PaymentStream": {
           "type": "object",
           "required": [
@@ -479,6 +889,16 @@
             "token_addr"
           ],
           "properties": {
+            "curve": {
+              "anyOf": [
+                {
+                  "$ref": "#/definitions/Curve"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
             "deposit": {
               "$ref": "#/definitions/Uint128"
             },
@@ -510,6 +930,61 @@
             },
             "token_addr": {
               "$ref": "#/definitions/Addr"
+            }
+          }
+        },
+        "PiecewiseLinear": {
+          "description": "This is a generalization of SaturatingLinear, steps must be arranged with increasing time (u64). Any point before first step gets the first value, after last step the last value. Otherwise, it is a linear interpolation between the two closest points. Vec of length 1 -> Constant Vec of length 2 -> SaturatingLinear",
+          "type": "object",
+          "required": [
+            "steps"
+          ],
+          "properties": {
+            "steps": {
+              "type": "array",
+              "items": {
+                "type": "array",
+                "items": [
+                  {
+                    "type": "integer",
+                    "format": "uint64",
+                    "minimum": 0.0
+                  },
+                  {
+                    "$ref": "#/definitions/Uint128"
+                  }
+                ],
+                "maxItems": 2,
+                "minItems": 2
+              }
+            }
+          }
+        },
+        "SaturatingLinear": {
+          "description": "min_y for all x <= min_x, max_y for all x >= max_x, linear in between",
+          "type": "object",
+          "required": [
+            "max_x",
+            "max_y",
+            "min_x",
+            "min_y"
+          ],
+          "properties": {
+            "max_x": {
+              "type": "integer",
+              "format": "uint64",
+              "minimum": 0.0
+            },
+            "max_y": {
+              "$ref": "#/definitions/Uint128"
+            },
+            "min_x": {
+              "type": "integer",
+              "format": "uint64",
+              "minimum": 0.0
+            },
+            "min_y": {
+              "$ref": "#/definitions/Uint128"
             }
           }
         },
@@ -552,6 +1027,54 @@
           "description": "A human readable address.\n\nIn Cosmos, this is typically bech32 encoded. But for multi-chain smart contracts no assumptions should be made other than being UTF-8 encoded and of reasonable length.\n\nThis type represents a validated address. It can be created in the following ways 1. Use `Addr::unchecked(input)` 2. Use `let checked: Addr = deps.api.addr_validate(input)?` 3. Use `let checked: Addr = deps.api.addr_humanize(canonical_addr)?` 4. Deserialize from JSON. This must only be done from JSON that was validated before such as a contract's state. `Addr` must not be used in messages sent by the user because this would result in unvalidated instances.\n\nThis type is immutable. If you really need to mutate it (Really? Are you sure?), create a mutable copy using `let mut mutable = Addr::to_string()` and operate on that `String` instance.",
           "type": "string"
         },
+        "Curve": {
+          "oneOf": [
+            {
+              "type": "object",
+              "required": [
+                "constant"
+              ],
+              "properties": {
+                "constant": {
+                  "type": "object",
+                  "required": [
+                    "y"
+                  ],
+                  "properties": {
+                    "y": {
+                      "$ref": "#/definitions/Uint128"
+                    }
+                  }
+                }
+              },
+              "additionalProperties": false
+            },
+            {
+              "type": "object",
+              "required": [
+                "saturating_linear"
+              ],
+              "properties": {
+                "saturating_linear": {
+                  "$ref": "#/definitions/SaturatingLinear"
+                }
+              },
+              "additionalProperties": false
+            },
+            {
+              "type": "object",
+              "required": [
+                "piecewise_linear"
+              ],
+              "properties": {
+                "piecewise_linear": {
+                  "$ref": "#/definitions/PiecewiseLinear"
+                }
+              },
+              "additionalProperties": false
+            }
+          ]
+        },
         "PaymentStream": {
           "type": "object",
           "required": [
@@ -567,6 +1090,16 @@
             "token_addr"
           ],
           "properties": {
+            "curve": {
+              "anyOf": [
+                {
+                  "$ref": "#/definitions/Curve"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
             "deposit": {
               "$ref": "#/definitions/Uint128"
             },
@@ -598,6 +1131,61 @@
             },
             "token_addr": {
               "$ref": "#/definitions/Addr"
+            }
+          }
+        },
+        "PiecewiseLinear": {
+          "description": "This is a generalization of SaturatingLinear, steps must be arranged with increasing time (u64). Any point before first step gets the first value, after last step the last value. Otherwise, it is a linear interpolation between the two closest points. Vec of length 1 -> Constant Vec of length 2 -> SaturatingLinear",
+          "type": "object",
+          "required": [
+            "steps"
+          ],
+          "properties": {
+            "steps": {
+              "type": "array",
+              "items": {
+                "type": "array",
+                "items": [
+                  {
+                    "type": "integer",
+                    "format": "uint64",
+                    "minimum": 0.0
+                  },
+                  {
+                    "$ref": "#/definitions/Uint128"
+                  }
+                ],
+                "maxItems": 2,
+                "minItems": 2
+              }
+            }
+          }
+        },
+        "SaturatingLinear": {
+          "description": "min_y for all x <= min_x, max_y for all x >= max_x, linear in between",
+          "type": "object",
+          "required": [
+            "max_x",
+            "max_y",
+            "min_x",
+            "min_y"
+          ],
+          "properties": {
+            "max_x": {
+              "type": "integer",
+              "format": "uint64",
+              "minimum": 0.0
+            },
+            "max_y": {
+              "$ref": "#/definitions/Uint128"
+            },
+            "min_x": {
+              "type": "integer",
+              "format": "uint64",
+              "minimum": 0.0
+            },
+            "min_y": {
+              "$ref": "#/definitions/Uint128"
             }
           }
         },
