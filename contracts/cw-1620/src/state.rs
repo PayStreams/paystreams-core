@@ -1,6 +1,7 @@
 use cosmwasm_schema::cw_serde;
 use cosmwasm_std::Decimal;
 use cosmwasm_std::Timestamp;
+use cw_asset::AssetInfoBase;
 // TODO: Consider using our own impl of Asset derived from WW and other implementations
 use cw_storage_plus::Index;
 use cw_storage_plus::IndexList;
@@ -60,7 +61,7 @@ pub struct PaymentStream {
     pub start_time: Timestamp,
     pub recipient: Addr,
     pub sender: Addr,
-    pub token_addr: Addr,
+    pub token_addr: AssetInfoBase<Addr>,
     pub is_entity: bool,
     pub curve: Option<Curve>,
 }

@@ -2,25 +2,28 @@
 use cosmwasm_std::entry_point;
 use cosmwasm_std::{
     to_binary, BankMsg, Binary, Coin, CosmosMsg, Deps, DepsMut, Env, MessageInfo, Order, Response,
-    StdResult, Timestamp, Uint128,
+    StdResult, Timestamp, Uint128, Addr, from_binary,
 };
 use cw2::set_contract_version;
 use cw_utils::may_pay;
 use wynd_utils::Curve;
+use cw20::Cw20ReceiveMsg;
 
 use crate::error::ContractError;
 use crate::msg::{
-    CountResponse, ExecuteMsg, InstantiateMsg, LookupStreamResponse, QueryMsg, StreamsResponse,
+    CountResponse, ExecuteMsg, InstantiateMsg, LookupStreamResponse, QueryMsg, StreamsResponse, Cw20HookMsg,
 };
 use crate::state::{
     payment_streams, ConfigState, PaymentStream, StreamData, StreamType, LAST_STREAM_IDX, STATE,
     STREAMS,
 };
+use cw_asset::{Asset, AssetInfo, AssetInfoBase, AssetInfoKey};
+
 
 // version info for migration info
 const CONTRACT_NAME: &str = "crates.io:cw-1620";
 const CONTRACT_VERSION: &str = env!("CARGO_PKG_VERSION");
-const DEFAULT_LIMIT_FOR_QUERY: usize = 10;
+const DEFAULT_LIMIT_FOR_QUERY: Uint128 = Uint128::new(10);
 #[allow(unused)]
 const DEFAULT_ORDER_FOR_QUERY: Order = Order::Ascending;
 #[cfg_attr(not(feature = "library"), entry_point)]
@@ -54,33 +57,83 @@ pub fn execute(
     msg: ExecuteMsg,
 ) -> Result<Response, ContractError> {
     match msg {
+        ExecuteMsg::Receive(msg) => receive_cw20(deps, env, info, msg),
         ExecuteMsg::CreateStream {
             recipient,
-            deposit,
-            token_addr,
+            asset,
             start_time,
             stop_time,
             stream_type,
             curve,
-        } => try_create_stream(
-            deps,
-            info,
-            recipient,
-            deposit,
-            token_addr,
-            StreamData {
-                start_time,
-                stop_time,
-                stream_type: stream_type,
-                curve: curve,
-            },
-        ),
+        } => 
+        
+        {   
+            match asset.info.clone() {
+                AssetInfo::Native(denom) => {
+                    let deposit_amount = may_pay(&info, &denom).unwrap();
+                    if deposit_amount < asset.amount {
+                        return Err(ContractError::NotEnoughAvailableFunds {});
+                    }
+                    try_create_stream(
+                    deps,
+                    info,
+                    recipient,
+                    asset.amount,
+                    asset.info,
+                    StreamData {
+                        start_time: start_time,
+                        stop_time: stop_time,
+                        stream_type: stream_type,
+                        curve: curve,
+                    },
+                )},
+                _ => unimplemented!()
+            }
+                
+            
+        },
         ExecuteMsg::WithdrawFromStream {
             recipient,
             amount,
             denom,
             stream_idx,
         } => try_withdraw_from_stream(deps, info, env, recipient, amount, denom, stream_idx),
+    }
+}
+
+// receive_cw20 routes a cw20 token to the proper handler in this case stake and unstake
+fn receive_cw20(
+    deps: DepsMut,
+    env: Env,
+    info: MessageInfo,
+    cw20_msg: Cw20ReceiveMsg,
+) -> Result<Response, ContractError> {
+    let sender = deps.api.addr_validate(&cw20_msg.sender)?;
+
+    match from_binary(&cw20_msg.msg)? {
+        Cw20HookMsg::CreateStream {recipient,
+            start_time,
+            stop_time,
+            stream_type,
+            curve} => {
+            if cw20_msg.amount.is_zero() {
+                return Err(ContractError::InvalidAmount {});
+            }
+            let asset = AssetInfo::Cw20(info.sender.clone());
+            try_create_stream(
+                deps,
+                info,
+                recipient,
+                cw20_msg.amount,
+                asset,
+                StreamData {
+                    start_time,
+                    stop_time,
+                    stream_type: stream_type,
+                    curve: curve,
+                },
+            )
+        }
     }
 }
 
@@ -94,23 +147,19 @@ pub fn try_create_stream(
     info: MessageInfo,
     recipient: String,
     deposit: Uint128,
-    token_addr: String,
+    token_addr: AssetInfoBase<Addr>,
     stream_data: StreamData,
 ) -> Result<Response, ContractError> {
     let recipient = deps.api.addr_validate(&recipient)?;
-    let duration = stream_data
-        .stop_time
-        .seconds()
-        .checked_sub(stream_data.start_time.seconds())
-        .ok_or(ContractError::Unauthorized {})
-        .unwrap();
+    let start_time = stream_data.start_time.seconds();
+    let stop_time = stream_data.stop_time.seconds();
 
-    let deposit_amount = may_pay(&info, &token_addr).unwrap();
-    // Ensure the first entry in funds is a native token and the amount is non zero
-    // To confirm if cw20, we can query the token info, if theres an error its not a cw20, then we can validate the address to ensure its a native token
-    if deposit_amount < deposit {
-        return Err(ContractError::NotEnoughAvailableFunds {});
+    if stop_time <= start_time {
+        return Err(ContractError::DeltaIssue { start_time: start_time, stop_time: stop_time });
     }
+
+    // Get the time delta
+    let duration = stop_time - start_time;    
 
     // Unless stream_type is provided we will assume it is StreamType::Basic
     let stream_type = stream_data.stream_type.unwrap_or(StreamType::Basic);
@@ -120,19 +169,18 @@ pub fn try_create_stream(
     // Only stream type is supported right now
     match stream_type {
         StreamType::Basic => {
-            let rate_per_second = deposit
-                .checked_div(Uint128::from(duration))
-                .unwrap_or_else(|_| Uint128::zero());
+            // Calculate rate_per_second with error handling
+            let rate_per_second = deposit.checked_div(Uint128::from(duration)).map_err(|_| ContractError::DivisionByZero {})?;
             let stream_data = PaymentStream {
                 stream_idx,
                 recipient: recipient.clone(),
-                deposit: deposit_amount,
-                token_addr: deps.api.addr_validate(&token_addr)?,
+                deposit,
+                token_addr: token_addr,
                 start_time: stream_data.start_time,
                 stop_time: stream_data.stop_time,
                 is_entity: false,
                 rate_per_second,
-                remaining_balance: deposit_amount,
+                remaining_balance: deposit,
                 sender: info.sender.clone(),
                 curve: None,
             };
@@ -162,13 +210,13 @@ pub fn try_create_stream(
                     let stream_data = PaymentStream {
                         stream_idx,
                         recipient: recipient.clone(),
-                        deposit: deposit_amount,
-                        token_addr: deps.api.addr_validate(&token_addr)?,
+                        deposit,
+                        token_addr,
                         start_time: stream_data.start_time,
                         stop_time: stream_data.stop_time,
                         is_entity: false,
                         rate_per_second,
-                        remaining_balance: deposit_amount,
+                        remaining_balance: deposit,
                         sender: info.sender.clone(),
                         curve: Some(curve),
                     };
@@ -192,13 +240,13 @@ pub fn try_create_stream(
                     let stream_data = PaymentStream {
                         stream_idx,
                         recipient: recipient.clone(),
-                        deposit: deposit_amount,
-                        token_addr: deps.api.addr_validate(&token_addr)?,
+                        deposit,
+                        token_addr,
                         start_time: stream_data.start_time,
                         stop_time: stream_data.stop_time,
                         is_entity: false,
                         rate_per_second,
-                        remaining_balance: deposit_amount,
+                        remaining_balance: deposit,
                         sender: info.sender.clone(),
                         curve: Some(curve),
                     };
@@ -397,7 +445,7 @@ pub fn query_streams_by_payee(
     deps: Deps,
     payee: String,
     order: Order,
-    limit: Option<usize>,
+    limit: Option<Uint128>,
 ) -> StdResult<StreamsResponse> {
     let _vld_payee = deps.api.addr_validate(&payee)?;
 
@@ -406,7 +454,7 @@ pub fn query_streams_by_payee(
         .recipient
         .prefix(payee)
         .range(deps.storage, None, None, order)
-        .take(limit.unwrap_or(DEFAULT_LIMIT_FOR_QUERY))
+        .take(limit.unwrap_or(DEFAULT_LIMIT_FOR_QUERY).u128() as usize)
         .flat_map(|vc| Ok::<PaymentStream, ContractError>(vc?.1))
         .collect();
 
@@ -417,7 +465,7 @@ pub fn query_streams_by_sender(
     deps: Deps,
     sender: String,
     order: Order,
-    limit: Option<usize>,
+    limit: Option<Uint128>,
 ) -> StdResult<StreamsResponse> {
     let _vld_sender = deps.api.addr_validate(&sender)?;
 
@@ -426,7 +474,7 @@ pub fn query_streams_by_sender(
         .sender
         .prefix(sender)
         .range(deps.storage, None, None, order)
-        .take(limit.unwrap_or(DEFAULT_LIMIT_FOR_QUERY))
+        .take(limit.unwrap_or(DEFAULT_LIMIT_FOR_QUERY).u128() as usize)
         .flat_map(|vc| Ok::<PaymentStream, ContractError>(vc?.1))
         .collect();
 
@@ -496,11 +544,12 @@ mod tests {
         let env = mock_env();
 
         let stream_msg = ExecuteMsg::CreateStream {
-            deposit: Uint128::new(100),
-            recipient: payee.sender.to_string(),
+            asset: Asset {
+                amount: Uint128::new(100),
+                info: AssetInfo::Native("axlusdc".to_string()),
+            },            recipient: payee.sender.to_string(),
             start_time: env.block.time,
             stop_time: env.block.time.plus_seconds(100),
-            token_addr: String::from("axlusdc"),
             stream_type: None,
             curve: None,
         };
@@ -542,11 +591,13 @@ mod tests {
         // Attempt to create a stream with 1 more dollar than provided. Cheating the system out of a dollar.
         // Basically "Hey lil dude from across the street, lemme hold a dollar"
         let stream_msg = ExecuteMsg::CreateStream {
-            deposit: Uint128::new(1001),
+            asset: Asset {
+                amount: Uint128::new(1001),
+                info: AssetInfo::Native("axlusdc".to_string()),
+            },
             recipient: payee.sender.to_string(),
             start_time: env.block.time,
             stop_time: env.block.time.plus_seconds(100),
-            token_addr: String::from("axlusdc"),
             stream_type: None,
             curve: None,
         };
@@ -556,11 +607,13 @@ mod tests {
 
         // Attempt to create a stream with the correct deposit and provided funds
         let stream_msg = ExecuteMsg::CreateStream {
-            deposit: Uint128::new(1000),
+            asset: Asset {
+                amount: Uint128::new(1000),
+                info: AssetInfo::Native("axlusdc".to_string()),
+            },
             recipient: payee.sender.to_string(),
             start_time: env.block.time,
             stop_time: env.block.time.plus_seconds(100),
-            token_addr: String::from("axlusdc"),
             stream_type: None,
             curve: None,
         };
@@ -602,11 +655,13 @@ mod tests {
         let mut env = mock_env();
 
         let stream_msg = ExecuteMsg::CreateStream {
-            deposit: Uint128::new(100),
+            asset: Asset {
+                amount: Uint128::new(100),
+                info: AssetInfo::Native("axlusdc".to_string()),
+            },
             recipient: payee.sender.to_string(),
             start_time: env.block.time,
             stop_time: env.block.time.plus_seconds(100),
-            token_addr: String::from("axlusdc"),
             stream_type: None,
             curve: None,
         };

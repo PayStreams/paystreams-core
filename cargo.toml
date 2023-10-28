@@ -19,6 +19,9 @@ thiserror = { version = "1.0.26" }
 cw-utils = { version = "1.0.1" }
 white-whale = { git = "https://github.com/White-Whale-Defi-Platform/white-whale-core"}
 wynd-utils = "0.4.1"
+cw-asset = "2.4.0"
+cw20 ="1.0.1"
+
 
 [workspace.dev-dependencies]
 cosmwasm-schema = { version = "1.3" }

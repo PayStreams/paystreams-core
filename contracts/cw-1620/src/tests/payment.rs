@@ -4,6 +4,49 @@ mod basic_use_cases {
 
     use crate::{tests::suite::SuiteBuilder, ContractError};
 
+
+    #[test]
+    fn test_create_stream_errors() {
+        let funder = Addr::unchecked("funder");
+        let alice = Addr::unchecked("alice");
+        let bob = Addr::unchecked("bob");
+        let charlie = Addr::unchecked("charlie");
+        let recipients = vec![alice, bob, charlie];
+        let mut suite = SuiteBuilder::new()
+            .with_funds(
+                &funder.to_string(),
+                &[Coin {
+                    denom: "ibc/something/axlusdc".to_string(),
+                    amount: Uint128::from(1000000000u128),
+                }],
+            )
+            .build();
+
+        // Attempt to create a stream
+        let err = suite
+            .create_stream(
+                funder.clone(),
+                recipients[0].clone(),
+                100u128,
+                "ibc/something/axlusdc",
+                suite.get_time_as_timestamp().plus_seconds(100),
+                suite.get_time_as_timestamp(),
+                &[Coin {
+                    denom: "ibc/something/axlusdc".to_string(),
+                    amount: Uint128::from(100u128),
+                }],
+                None,
+                None,
+            )
+            .unwrap_err();
+        assert_eq!(
+            ContractError::Unauthorized {  },
+            err.downcast().unwrap(),
+            "Expected InvalidTime error"
+        );
+
+    }
+
     #[test]
     fn test_create_stream() {
         let funder = Addr::unchecked("funder");
@@ -47,7 +90,7 @@ mod basic_use_cases {
                 assert_eq!(stream.recipient, recipients[0].to_string());
                 assert_eq!(stream.sender, funder.to_string());
                 assert_eq!(stream.deposit, Uint128::from(100u128));
-                assert_eq!(stream.token_addr, "ibc/something/axlusdc".to_string());
+                assert_eq!(stream.token_addr.to_string(), "native:ibc/something/axlusdc".to_string());
                 assert_eq!(stream.start_time, suite.get_time_as_timestamp());
                 assert_eq!(
                     stream.stop_time,
@@ -70,7 +113,7 @@ mod basic_use_cases {
                 assert_eq!(stream.recipient, recipients[0].to_string());
                 assert_eq!(stream.sender, funder.to_string());
                 assert_eq!(stream.deposit, Uint128::from(100u128));
-                assert_eq!(stream.token_addr, "ibc/something/axlusdc".to_string());
+                assert_eq!(stream.token_addr.to_string(), "native:ibc/something/axlusdc".to_string());
                 assert_eq!(stream.start_time, suite.get_time_as_timestamp());
                 assert_eq!(
                     stream.stop_time,
@@ -94,7 +137,7 @@ mod basic_use_cases {
                 assert_eq!(stream.recipient, recipients[0].to_string());
                 assert_eq!(stream.sender, funder.to_string());
                 assert_eq!(stream.deposit, Uint128::from(100u128));
-                assert_eq!(stream.token_addr, "ibc/something/axlusdc".to_string());
+                assert_eq!(stream.token_addr.to_string(), "native:ibc/something/axlusdc".to_string());
                 assert_eq!(stream.start_time, suite.get_time_as_timestamp());
                 assert_eq!(
                     stream.stop_time,
@@ -127,7 +170,7 @@ mod basic_use_cases {
                 assert_eq!(stream.recipient, recipients[0].to_string());
                 assert_eq!(stream.sender, funder.to_string());
                 assert_eq!(stream.deposit, Uint128::from(100u128));
-                assert_eq!(stream.token_addr, "ibc/something/axlusdc".to_string());
+                assert_eq!(stream.token_addr.to_string(), "native:ibc/something/axlusdc".to_string());
                 assert_eq!(stream.remaining_balance, Uint128::from(50u128));
             }
             None => {
@@ -328,7 +371,7 @@ mod views_with_mock_data {
         assert_eq!(streams[0].recipient, recipients[0].to_string());
         assert_eq!(streams[0].sender, funder.to_string());
         assert_eq!(streams[0].deposit, Uint128::from(100u128));
-        assert_eq!(streams[0].token_addr, "ibc/something/axlusdc".to_string());
+        assert_eq!(streams[0].token_addr.to_string(), "ibc/something/axlusdc".to_string());
         assert_eq!(streams[0].start_time, suite.get_time_as_timestamp());
         assert_eq!(
             streams[0].stop_time,
@@ -404,7 +447,7 @@ mod views_with_mock_data {
         assert_eq!(streams[0].recipient, recipients[1].to_string());
         assert_eq!(streams[0].sender, funder.to_string());
         assert_eq!(streams[0].deposit, Uint128::from(100u128));
-        assert_eq!(streams[0].token_addr, "ibc/something/axlusdc".to_string());
+        assert_eq!(streams[0].token_addr.to_string(), "ibc/something/axlusdc".to_string());
         assert_eq!(streams[0].start_time, suite.get_time_as_timestamp());
         assert_eq!(
             streams[0].stop_time,
@@ -569,7 +612,7 @@ mod curve_tests {
                 assert_eq!(stream.recipient, recipients[0].to_string());
                 assert_eq!(stream.sender, funder.to_string());
                 assert_eq!(stream.deposit, Uint128::from(100u128));
-                assert_eq!(stream.token_addr, "ibc/something/axlusdc".to_string());
+                assert_eq!(stream.token_addr.to_string(), "ibc/something/axlusdc".to_string());
                 assert_eq!(stream.remaining_balance, Uint128::from(100u128));
             }
             None => {
@@ -599,7 +642,7 @@ mod curve_tests {
                 assert_eq!(stream.recipient, recipients[0].to_string());
                 assert_eq!(stream.sender, funder.to_string());
                 assert_eq!(stream.deposit, Uint128::from(100u128));
-                assert_eq!(stream.token_addr, "ibc/something/axlusdc".to_string());
+                assert_eq!(stream.token_addr.to_string(),  "ibc/something/axlusdc".to_string());
                 assert_eq!(stream.remaining_balance, Uint128::from(80u128));
             }
             None => {

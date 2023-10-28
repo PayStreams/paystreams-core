@@ -1,7 +1,9 @@
 use crate::state::{PaymentStream, StreamType};
 use cosmwasm_schema::{cw_serde, QueryResponses};
 use cosmwasm_std::{Timestamp, Uint128};
+use cw_asset::{Asset, AssetInfo};
 use wynd_utils::Curve;
+use cw20::Cw20ReceiveMsg;
 
 #[cw_serde]
 pub struct InstantiateMsg {
@@ -9,12 +11,11 @@ pub struct InstantiateMsg {
 }
 
 #[cw_serde]
-
 pub enum ExecuteMsg {
+    Receive(Cw20ReceiveMsg),
     CreateStream {
         recipient: String,
-        deposit: Uint128,
-        token_addr: String,
+        asset: Asset,
         start_time: Timestamp,
         stop_time: Timestamp,
         stream_type: Option<StreamType>,
@@ -29,6 +30,17 @@ pub enum ExecuteMsg {
 }
 
 #[cw_serde]
+pub enum Cw20HookMsg {
+    CreateStream {
+        recipient: String,
+        start_time: Timestamp,
+        stop_time: Timestamp,
+        stream_type: Option<StreamType>,
+        curve: Option<Curve>,
+    },
+}
+
+#[cw_serde]
 #[derive(QueryResponses)]
 pub enum QueryMsg {
     #[returns(LookupStreamResponse)]
@@ -39,13 +51,13 @@ pub enum QueryMsg {
     StreamsByPayee {
         payee: String,
         reverse: Option<bool>,
-        limit: Option<usize>,
+        limit: Option<Uint128>,
     },
     #[returns(StreamsResponse)]
     StreamsBySender {
         sender: String,
         reverse: Option<bool>,
-        limit: Option<usize>,
+        limit: Option<Uint128>,
     },
     #[returns(StreamsResponse)]
     StreamsByIndex { index: u64 },

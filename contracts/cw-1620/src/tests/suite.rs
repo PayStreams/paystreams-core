@@ -1,5 +1,6 @@
 use anyhow::Result as AnyResult;
 use cosmwasm_std::{Addr, Coin, StdResult, Timestamp};
+use cw_asset::{Asset, AssetInfo};
 use cw_multi_test::{App, AppResponse, ContractWrapper, Executor};
 use wynd_utils::Curve;
 
@@ -106,6 +107,7 @@ impl Suite {
                 block.height += time_update / 5;
             })
     }
+    
 
     pub fn query_balance(&self, user: &str, denom: &str) -> AnyResult<u128> {
         Ok(self.app.wrap().query_balance(user, denom)?.amount.u128())
@@ -127,8 +129,10 @@ impl Suite {
     ) -> AnyResult<AppResponse> {
         let msg = crate::msg::ExecuteMsg::CreateStream {
             recipient: recipient.to_string(),
-            deposit: deposit.into(),
-            token_addr: token_addr.to_string(),
+            asset: Asset {
+                amount: deposit.into(),
+                info: AssetInfo::Native(token_addr.to_string())
+            },
             start_time: start_time,
             stop_time: stop_time,
             stream_type: stream_type,
