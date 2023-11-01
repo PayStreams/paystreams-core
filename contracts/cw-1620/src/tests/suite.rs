@@ -121,8 +121,8 @@ impl Suite {
         recipient: Addr,
         deposit: u128,
         token_addr: &str,
-        start_time: Timestamp,
-        stop_time: Timestamp,
+        start_time: u64,
+        stop_time: u64,
         funds: &[Coin],
         stream_type: Option<StreamType>,
         curve: Option<Curve>,
@@ -150,7 +150,7 @@ impl Suite {
         denom: &str,
         stream_idx: Option<u64>,
     ) -> AnyResult<AppResponse> {
-        let msg = crate::msg::ExecuteMsg::WithdrawFromStream {
+        let msg = crate::msg::ExecuteMsg::ClaimFromStream {
             recipient: recipient.to_string(),
             amount: amount.into(),
             denom: denom.to_string(),
@@ -224,5 +224,15 @@ impl Suite {
             .query_wasm_smart(&self.paystreams_addr, &msg)?;
 
         Ok(streams)
+    }
+
+    pub fn query_stream_claimable_amount(&mut self, index: u64) -> StdResult<u128> {
+        let msg = crate::msg::QueryMsg::StreamClaimableAmount { index: index };
+        let claimable_amt: crate::msg::StreamClaimableAmtResponse = self
+            .app
+            .wrap()
+            .query_wasm_smart(&self.paystreams_addr, &msg)?;
+
+        Ok(claimable_amt.amount_available.u128())
     }
 }

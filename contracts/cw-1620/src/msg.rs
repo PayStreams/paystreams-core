@@ -16,16 +16,19 @@ pub enum ExecuteMsg {
     CreateStream {
         recipient: String,
         asset: Asset,
-        start_time: Timestamp,
-        stop_time: Timestamp,
+        start_time: u64,
+        stop_time: u64,
         stream_type: Option<StreamType>,
         curve: Option<Curve>,
     },
-    WithdrawFromStream {
+    ClaimFromStream {
         recipient: String,
         amount: Uint128,
         denom: String,
         stream_idx: Option<u64>,
+    },
+    CancelStream {
+        stream_idx: u64,
     },
 }
 
@@ -33,8 +36,8 @@ pub enum ExecuteMsg {
 pub enum Cw20HookMsg {
     CreateStream {
         recipient: String,
-        start_time: Timestamp,
-        stop_time: Timestamp,
+        start_time: u64,
+        stop_time: u64,
         stream_type: Option<StreamType>,
         curve: Option<Curve>,
     },
@@ -61,6 +64,9 @@ pub enum QueryMsg {
     },
     #[returns(StreamsResponse)]
     StreamsByIndex { index: u64 },
+
+    #[returns(StreamClaimableAmtResponse)]
+    StreamClaimableAmount { index: u64 },
 }
 
 // We define a custom struct for each query response
@@ -79,4 +85,10 @@ pub struct LookupStreamResponse {
 #[cw_serde]
 pub struct StreamsResponse {
     pub streams: Vec<PaymentStream>,
+}
+
+#[cw_serde]
+pub struct StreamClaimableAmtResponse {
+    pub amount_available: Uint128,
+    pub stream: PaymentStream,
 }

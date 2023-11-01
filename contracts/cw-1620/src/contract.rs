@@ -2,16 +2,17 @@
 use cosmwasm_std::entry_point;
 use cosmwasm_std::{
     to_binary, BankMsg, Binary, Coin, CosmosMsg, Deps, DepsMut, Env, MessageInfo, Order, Response,
-    StdResult, Timestamp, Uint128, Addr, from_binary,
+    StdResult, Timestamp, Uint128, Addr, from_binary, Empty,
 };
 use cw2::set_contract_version;
 use cw_utils::may_pay;
+use serde::de;
 use wynd_utils::Curve;
 use cw20::Cw20ReceiveMsg;
 
 use crate::error::ContractError;
 use crate::msg::{
-    CountResponse, ExecuteMsg, InstantiateMsg, LookupStreamResponse, QueryMsg, StreamsResponse, Cw20HookMsg,
+    CountResponse, ExecuteMsg, InstantiateMsg, LookupStreamResponse, QueryMsg, StreamsResponse, Cw20HookMsg, StreamClaimableAmtResponse,
 };
 use crate::state::{
     payment_streams, ConfigState, PaymentStream, StreamData, StreamType, LAST_STREAM_IDX, STATE,
@@ -50,6 +51,13 @@ pub fn instantiate(
 }
 
 #[cfg_attr(not(feature = "library"), entry_point)]
+pub fn migrate(deps: DepsMut, _env: Env, msg: Empty) -> Result<Response, ContractError> {
+    
+
+    Ok(Response::new())
+}
+
+#[cfg_attr(not(feature = "library"), entry_point)]
 pub fn execute(
     deps: DepsMut,
     env: Env,
@@ -81,8 +89,8 @@ pub fn execute(
                     asset.amount,
                     asset.info,
                     StreamData {
-                        start_time: start_time,
-                        stop_time: stop_time,
+                        start_time: Timestamp::from_seconds(start_time),
+                        stop_time: Timestamp::from_seconds(stop_time),
                         stream_type: stream_type,
                         curve: curve,
                     },
@@ -92,12 +100,52 @@ pub fn execute(
                 
             
         },
-        ExecuteMsg::WithdrawFromStream {
+        ExecuteMsg::ClaimFromStream {
             recipient,
             amount,
             denom,
             stream_idx,
-        } => try_withdraw_from_stream(deps, info, env, recipient, amount, denom, stream_idx),
+        } => claim_from_stream(deps, info, env, recipient, amount, denom, stream_idx),
+        ExecuteMsg::CancelStream { stream_idx } => {
+            // Load stream, verify sender is the sender of stream, and then delete stream
+            let stream = payment_streams().load(deps.storage, &stream_idx.to_string())?;
+            if stream.sender != info.sender {
+                return Err(ContractError::Unauthorized {});
+            }
+
+            // Check it doesn't exceed available
+            let available_bal_for_stream: Uint128 =
+                avail_balance_of(stream.clone(), env).unwrap_or_else(|_| Uint128::zero());
+
+            let mut messages: Vec<CosmosMsg> = vec![];
+            let denom = match stream.token_addr {
+                AssetInfo::Native(denom) => denom,
+                _ => unimplemented!(),
+            };
+            if available_bal_for_stream > Uint128::zero() {
+                // Pay the available to the receipient
+                let payout_msg: CosmosMsg = CosmosMsg::Bank(BankMsg::Send {
+                    to_address: stream.recipient.to_string(),
+                    amount: vec![Coin {
+                        denom: denom.clone(),
+                        amount: available_bal_for_stream,
+                    }],
+                });
+                messages.push(payout_msg);
+            }
+            // Pay the remaining to the sender
+            let payout_msg: CosmosMsg = CosmosMsg::Bank(BankMsg::Send {
+                to_address: stream.sender.to_string(),
+                amount: vec![Coin { denom, amount: stream.remaining_balance.checked_sub(available_bal_for_stream)? }],
+            });
+            messages.push(payout_msg);
+
+            // Return response with messages
+            Ok(Response::new()
+                .add_messages(messages)
+                .add_attribute("method", "cancel_stream"))
+            
+        },
     }
 }
 
@@ -127,8 +175,8 @@ fn receive_cw20(
                 cw20_msg.amount,
                 asset,
                 StreamData {
-                    start_time,
-                    stop_time,
+                    start_time: Timestamp::from_seconds(start_time),
+                    stop_time: Timestamp::from_seconds(stop_time),
                     stream_type: stream_type,
                     curve: curve,
                 },
@@ -275,7 +323,7 @@ pub fn try_create_stream(
     Ok(Response::new().add_attribute("method", "try_create_stream"))
 }
 
-pub fn try_withdraw_from_stream(
+pub fn claim_from_stream(
     deps: DepsMut,
     info: MessageInfo,
     env: Env,
@@ -395,8 +443,32 @@ pub fn delta(stream: PaymentStream, env: Env) -> StdResult<u64> {
     Ok(Timestamp::from_seconds(duration).seconds())
 }
 
+pub fn deltaOf(deps:Deps, env: Env,stream_id: u64) -> StdResult<u64> {
+    // Get the stream from storage
+    let stream = payment_streams().load(deps.storage, &stream_id.to_string())?;
+    // If the stream hasn't started yet, return 0
+    if env.block.time <= stream.start_time {
+        return Ok(0);
+    }
+    // If the stream has started but not ended, return the delta
+    if env.block.time < stream.stop_time {
+        return Ok(env
+            .block
+            .time
+            .minus_seconds(stream.start_time.seconds())
+            .seconds());
+    }
+    // If the stream has ended, return the duration
+    let duration = stream
+        .stop_time
+        .seconds()
+        .checked_sub(stream.start_time.seconds())
+        .unwrap();
+    Ok(Timestamp::from_seconds(duration).seconds())
+}
+
 #[cfg_attr(not(feature = "library"), entry_point)]
-pub fn query(deps: Deps, _env: Env, msg: QueryMsg) -> StdResult<Binary> {
+pub fn query(deps: Deps, env: Env, msg: QueryMsg) -> StdResult<Binary> {
     match msg {
         QueryMsg::LookupStream { payer, payee } => to_binary(&query_stream(deps, payer, payee)?),
         QueryMsg::StreamCount {} => to_binary(&query_stream_count(deps)?),
@@ -425,6 +497,7 @@ pub fn query(deps: Deps, _env: Env, msg: QueryMsg) -> StdResult<Binary> {
             to_binary(&query_streams_by_sender(deps, sender, order, limit)?)
         }
         QueryMsg::StreamsByIndex { index } => to_binary(&query_stream_by_index(deps, index)?),
+        QueryMsg::StreamClaimableAmount { index } => to_binary(&query_stream_amount_claimable(deps, env, index)?),
     }
 }
 
@@ -491,6 +564,21 @@ pub fn query_stream_by_index(deps: Deps, stream_idx: u64) -> StdResult<StreamsRe
     })
 }
 
+pub fn query_stream_amount_claimable(deps: Deps, env: Env,stream_idx: u64) -> StdResult<StreamClaimableAmtResponse> {
+    // Get 1 from payment_streams
+    let stream = payment_streams().load(deps.storage, &stream_idx.to_string())?;
+    // Get the time delta
+    let delta = delta(stream.clone(), env.clone())?;
+    // Use delta to get the balance that should be available
+    let rec_bal = Uint128::from(delta).checked_mul(stream.rate_per_second)?;
+    // println!("Delta: {:?}, Recipient Balance: {:?}", delta, rec_bal);
+
+    Ok(StreamClaimableAmtResponse {
+        stream,
+        amount_available: rec_bal,
+    })
+}
+
 // TODO: Add more queries for streams information such as
 // + how much is left to be received (all unclaimed funds ready to claim+all due funds until end of stream)
 // + how much will be paid/available at a given time (all earnings from start->given time less any claimed funds
@@ -548,8 +636,8 @@ mod tests {
                 amount: Uint128::new(100),
                 info: AssetInfo::Native("axlusdc".to_string()),
             },            recipient: payee.sender.to_string(),
-            start_time: env.block.time,
-            stop_time: env.block.time.plus_seconds(100),
+            start_time: env.block.time.seconds(),
+            stop_time: env.block.time.plus_seconds(100).seconds(),
             stream_type: None,
             curve: None,
         };
@@ -596,8 +684,8 @@ mod tests {
                 info: AssetInfo::Native("axlusdc".to_string()),
             },
             recipient: payee.sender.to_string(),
-            start_time: env.block.time,
-            stop_time: env.block.time.plus_seconds(100),
+            start_time: env.block.time.seconds(),
+            stop_time: env.block.time.plus_seconds(100).seconds(),
             stream_type: None,
             curve: None,
         };
@@ -612,8 +700,8 @@ mod tests {
                 info: AssetInfo::Native("axlusdc".to_string()),
             },
             recipient: payee.sender.to_string(),
-            start_time: env.block.time,
-            stop_time: env.block.time.plus_seconds(100),
+            start_time: env.block.time.seconds(),
+            stop_time: env.block.time.plus_seconds(100).seconds(),
             stream_type: None,
             curve: None,
         };
@@ -660,8 +748,8 @@ mod tests {
                 info: AssetInfo::Native("axlusdc".to_string()),
             },
             recipient: payee.sender.to_string(),
-            start_time: env.block.time,
-            stop_time: env.block.time.plus_seconds(100),
+            start_time: env.block.time.seconds(),
+            stop_time: env.block.time.plus_seconds(100).seconds(),
             stream_type: None,
             curve: None,
         };
@@ -671,7 +759,7 @@ mod tests {
         assert_eq!(execute_res.events.len(), 0);
 
         // Verify the payee cant get all right away
-        let withdraw_msg = ExecuteMsg::WithdrawFromStream {
+        let withdraw_msg = ExecuteMsg::ClaimFromStream {
             amount: Uint128::new(90),
             denom: String::from("axlusdc"),
             recipient: payee.sender.to_string(),
@@ -686,7 +774,7 @@ mod tests {
         }
 
         env.block.time = Timestamp::from_seconds(env.block.time.seconds() + 10);
-        let withdraw_msg = ExecuteMsg::WithdrawFromStream {
+        let withdraw_msg = ExecuteMsg::ClaimFromStream {
             amount: Uint128::new(10),
             denom: String::from("axlusdc"),
             recipient: payee.sender.to_string(),
@@ -708,7 +796,7 @@ mod tests {
         );
 
         // Verify the payee cant get all right away
-        let withdraw_msg = ExecuteMsg::WithdrawFromStream {
+        let withdraw_msg = ExecuteMsg::ClaimFromStream {
             amount: Uint128::new(90),
             denom: String::from("axlusdc"),
             recipient: payee.sender.to_string(),
@@ -725,7 +813,7 @@ mod tests {
         // Simulate the rest of the time, payee is able to get more now
         // env.block.height += 70;
         env.block.time = Timestamp::from_seconds(env.block.time.seconds() + 90);
-        let withdraw_msg = ExecuteMsg::WithdrawFromStream {
+        let withdraw_msg = ExecuteMsg::ClaimFromStream {
             amount: Uint128::new(90),
             denom: String::from("axlusdc"),
             recipient: payee.sender.to_string(),
@@ -750,7 +838,7 @@ mod tests {
         // Now this time, having drained the funds. No more should be sent right ?
         // env.block.height += 51;
         env.block.time = Timestamp::from_seconds(env.block.time.seconds() + 51);
-        let withdraw_msg = ExecuteMsg::WithdrawFromStream {
+        let withdraw_msg = ExecuteMsg::ClaimFromStream {
             amount: Uint128::new(10),
             denom: String::from("axlusdc"),
             recipient: payee.sender.to_string(),

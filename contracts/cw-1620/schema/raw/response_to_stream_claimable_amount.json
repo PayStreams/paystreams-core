@@ -1,168 +1,24 @@
 {
   "$schema": "http://json-schema.org/draft-07/schema#",
-  "title": "ExecuteMsg",
-  "oneOf": [
-    {
-      "type": "object",
-      "required": [
-        "receive"
-      ],
-      "properties": {
-        "receive": {
-          "$ref": "#/definitions/Cw20ReceiveMsg"
-        }
-      },
-      "additionalProperties": false
-    },
-    {
-      "type": "object",
-      "required": [
-        "create_stream"
-      ],
-      "properties": {
-        "create_stream": {
-          "type": "object",
-          "required": [
-            "asset",
-            "recipient",
-            "start_time",
-            "stop_time"
-          ],
-          "properties": {
-            "asset": {
-              "$ref": "#/definitions/AssetBase_for_Addr"
-            },
-            "curve": {
-              "anyOf": [
-                {
-                  "$ref": "#/definitions/Curve"
-                },
-                {
-                  "type": "null"
-                }
-              ]
-            },
-            "recipient": {
-              "type": "string"
-            },
-            "start_time": {
-              "type": "integer",
-              "format": "uint64",
-              "minimum": 0.0
-            },
-            "stop_time": {
-              "type": "integer",
-              "format": "uint64",
-              "minimum": 0.0
-            },
-            "stream_type": {
-              "anyOf": [
-                {
-                  "$ref": "#/definitions/StreamType"
-                },
-                {
-                  "type": "null"
-                }
-              ]
-            }
-          },
-          "additionalProperties": false
-        }
-      },
-      "additionalProperties": false
-    },
-    {
-      "type": "object",
-      "required": [
-        "claim_from_stream"
-      ],
-      "properties": {
-        "claim_from_stream": {
-          "type": "object",
-          "required": [
-            "amount",
-            "denom",
-            "recipient"
-          ],
-          "properties": {
-            "amount": {
-              "$ref": "#/definitions/Uint128"
-            },
-            "denom": {
-              "type": "string"
-            },
-            "recipient": {
-              "type": "string"
-            },
-            "stream_idx": {
-              "type": [
-                "integer",
-                "null"
-              ],
-              "format": "uint64",
-              "minimum": 0.0
-            }
-          },
-          "additionalProperties": false
-        }
-      },
-      "additionalProperties": false
-    },
-    {
-      "type": "object",
-      "required": [
-        "cancel_stream"
-      ],
-      "properties": {
-        "cancel_stream": {
-          "type": "object",
-          "required": [
-            "stream_idx"
-          ],
-          "properties": {
-            "stream_idx": {
-              "type": "integer",
-              "format": "uint64",
-              "minimum": 0.0
-            }
-          },
-          "additionalProperties": false
-        }
-      },
-      "additionalProperties": false
-    }
+  "title": "StreamClaimableAmtResponse",
+  "type": "object",
+  "required": [
+    "amount_available",
+    "stream"
   ],
+  "properties": {
+    "amount_available": {
+      "$ref": "#/definitions/Uint128"
+    },
+    "stream": {
+      "$ref": "#/definitions/PaymentStream"
+    }
+  },
+  "additionalProperties": false,
   "definitions": {
     "Addr": {
       "description": "A human readable address.\n\nIn Cosmos, this is typically bech32 encoded. But for multi-chain smart contracts no assumptions should be made other than being UTF-8 encoded and of reasonable length.\n\nThis type represents a validated address. It can be created in the following ways 1. Use `Addr::unchecked(input)` 2. Use `let checked: Addr = deps.api.addr_validate(input)?` 3. Use `let checked: Addr = deps.api.addr_humanize(canonical_addr)?` 4. Deserialize from JSON. This must only be done from JSON that was validated before such as a contract's state. `Addr` must not be used in messages sent by the user because this would result in unvalidated instances.\n\nThis type is immutable. If you really need to mutate it (Really? Are you sure?), create a mutable copy using `let mut mutable = Addr::to_string()` and operate on that `String` instance.",
       "type": "string"
-    },
-    "AssetBase_for_Addr": {
-      "description": "Represents a fungible asset with a known amount\n\nEach asset instance contains two values: [`info`], which specifies the asset's type (CW20 or native), and its [`amount`], which specifies the asset's amount",
-      "type": "object",
-      "required": [
-        "amount",
-        "info"
-      ],
-      "properties": {
-        "amount": {
-          "description": "Specifies the asset's amount",
-          "allOf": [
-            {
-              "$ref": "#/definitions/Uint128"
-            }
-          ]
-        },
-        "info": {
-          "description": "Specifies the asset's type (CW20 or native)",
-          "allOf": [
-            {
-              "$ref": "#/definitions/AssetInfoBase_for_Addr"
-            }
-          ]
-        }
-      },
-      "additionalProperties": false
     },
     "AssetInfoBase_for_Addr": {
       "description": "Represents the type of an fungible asset\n\nEach **asset info** instance can be one of three variants:\n\n- Native SDK coins. To create an **asset info** instance of this type, provide the denomination. - CW20 tokens. To create an **asset info** instance of this type, provide the contract address. - CW1155 tokens. To create an **asset info** instance of this type, provide the contract address and token ID.",
@@ -215,10 +71,6 @@
         }
       ]
     },
-    "Binary": {
-      "description": "Binary is a wrapper around Vec<u8> to add base64 de/serialization with serde. It also adds some helper methods to help encode inline.\n\nThis is only needed as serde-json-{core,wasm} has a horrible encoding for Vec<u8>. See also <https://github.com/CosmWasm/cosmwasm/blob/main/docs/MESSAGE_TYPES.md>.",
-      "type": "string"
-    },
     "Curve": {
       "oneOf": [
         {
@@ -267,26 +119,64 @@
         }
       ]
     },
-    "Cw20ReceiveMsg": {
-      "description": "Cw20ReceiveMsg should be de/serialized under `Receive()` variant in a ExecuteMsg",
+    "PaymentStream": {
       "type": "object",
       "required": [
-        "amount",
-        "msg",
-        "sender"
+        "deposit",
+        "is_entity",
+        "rate_per_second",
+        "recipient",
+        "remaining_balance",
+        "sender",
+        "start_time",
+        "stop_time",
+        "stream_idx",
+        "token_addr"
       ],
       "properties": {
-        "amount": {
+        "curve": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/Curve"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "deposit": {
           "$ref": "#/definitions/Uint128"
         },
-        "msg": {
-          "$ref": "#/definitions/Binary"
+        "is_entity": {
+          "type": "boolean"
+        },
+        "rate_per_second": {
+          "$ref": "#/definitions/Uint128"
+        },
+        "recipient": {
+          "$ref": "#/definitions/Addr"
+        },
+        "remaining_balance": {
+          "$ref": "#/definitions/Uint128"
         },
         "sender": {
-          "type": "string"
+          "$ref": "#/definitions/Addr"
+        },
+        "start_time": {
+          "$ref": "#/definitions/Timestamp"
+        },
+        "stop_time": {
+          "$ref": "#/definitions/Timestamp"
+        },
+        "stream_idx": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0.0
+        },
+        "token_addr": {
+          "$ref": "#/definitions/AssetInfoBase_for_Addr"
         }
-      },
-      "additionalProperties": false
+      }
     },
     "PiecewiseLinear": {
       "description": "This is a generalization of SaturatingLinear, steps must be arranged with increasing time (u64). Any point before first step gets the first value, after last step the last value. Otherwise, it is a linear interpolation between the two closest points. Vec of length 1 -> Constant Vec of length 2 -> SaturatingLinear",
@@ -343,21 +233,20 @@
         }
       }
     },
-    "StreamType": {
-      "description": "All the different types of payment streams we can create Not all types are supported as of yet but these are all the possible types Note DynamicCurveBased can be used to create almost any type of payment curve and is for very advanced use cases",
-      "type": "string",
-      "enum": [
-        "basic",
-        "linear_curve_based",
-        "cliff_curve_based",
-        "dynamic_curve_based",
-        "exponential_curve_based",
-        "exponential_curve_based_with_cliff",
-        "traditional_unlock_step_curve"
+    "Timestamp": {
+      "description": "A point in time in nanosecond precision.\n\nThis type can represent times from 1970-01-01T00:00:00Z to 2554-07-21T23:34:33Z.\n\n## Examples\n\n``` # use cosmwasm_std::Timestamp; let ts = Timestamp::from_nanos(1_000_000_202); assert_eq!(ts.nanos(), 1_000_000_202); assert_eq!(ts.seconds(), 1); assert_eq!(ts.subsec_nanos(), 202);\n\nlet ts = ts.plus_seconds(2); assert_eq!(ts.nanos(), 3_000_000_202); assert_eq!(ts.seconds(), 3); assert_eq!(ts.subsec_nanos(), 202); ```",
+      "allOf": [
+        {
+          "$ref": "#/definitions/Uint64"
+        }
       ]
     },
     "Uint128": {
       "description": "A thin wrapper around u128 that is using strings for JSON encoding/decoding, such that the full u128 range can be used for clients that convert JSON numbers to floats, like JavaScript and jq.\n\n# Examples\n\nUse `from` to create instances of this and `u128` to get the value out:\n\n``` # use cosmwasm_std::Uint128; let a = Uint128::from(123u128); assert_eq!(a.u128(), 123);\n\nlet b = Uint128::from(42u64); assert_eq!(b.u128(), 42);\n\nlet c = Uint128::from(70u32); assert_eq!(c.u128(), 70); ```",
+      "type": "string"
+    },
+    "Uint64": {
+      "description": "A thin wrapper around u64 that is using strings for JSON encoding/decoding, such that the full u64 range can be used for clients that convert JSON numbers to floats, like JavaScript and jq.\n\n# Examples\n\nUse `from` to create instances of this and `u64` to get the value out:\n\n``` # use cosmwasm_std::Uint64; let a = Uint64::from(42u64); assert_eq!(a.u64(), 42);\n\nlet b = Uint64::from(70u32); assert_eq!(b.u64(), 70); ```",
       "type": "string"
     }
   }

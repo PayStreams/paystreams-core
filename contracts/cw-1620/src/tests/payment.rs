@@ -29,8 +29,8 @@ mod basic_use_cases {
                 recipients[0].clone(),
                 100u128,
                 "ibc/something/axlusdc",
-                suite.get_time_as_timestamp().plus_seconds(100),
-                suite.get_time_as_timestamp(),
+                suite.get_time_as_timestamp().plus_seconds(100).seconds(),
+                suite.get_time_as_timestamp().seconds(),
                 &[Coin {
                     denom: "ibc/something/axlusdc".to_string(),
                     amount: Uint128::from(100u128),
@@ -40,7 +40,7 @@ mod basic_use_cases {
             )
             .unwrap_err();
         assert_eq!(
-            ContractError::Unauthorized {  },
+            ContractError::DeltaIssue { start_time: 1571797519, stop_time: 1571797419 },
             err.downcast().unwrap(),
             "Expected InvalidTime error"
         );
@@ -71,8 +71,8 @@ mod basic_use_cases {
                 recipients[0].clone(),
                 100u128,
                 "ibc/something/axlusdc",
-                suite.get_time_as_timestamp(),
-                suite.get_time_as_timestamp().plus_seconds(100),
+                suite.get_time_as_timestamp().seconds(),
+                suite.get_time_as_timestamp().plus_seconds(100).seconds(),
                 &[Coin {
                     denom: "ibc/something/axlusdc".to_string(),
                     amount: Uint128::from(100u128),
@@ -91,10 +91,10 @@ mod basic_use_cases {
                 assert_eq!(stream.sender, funder.to_string());
                 assert_eq!(stream.deposit, Uint128::from(100u128));
                 assert_eq!(stream.token_addr.to_string(), "native:ibc/something/axlusdc".to_string());
-                assert_eq!(stream.start_time, suite.get_time_as_timestamp());
+                assert_eq!(stream.start_time.seconds(), suite.get_time_as_timestamp().seconds());
                 assert_eq!(
-                    stream.stop_time,
-                    suite.get_time_as_timestamp().plus_seconds(100)
+                    stream.stop_time.seconds(),
+                    suite.get_time_as_timestamp().plus_seconds(100).seconds()
                 );
             }
             None => {
@@ -114,10 +114,10 @@ mod basic_use_cases {
                 assert_eq!(stream.sender, funder.to_string());
                 assert_eq!(stream.deposit, Uint128::from(100u128));
                 assert_eq!(stream.token_addr.to_string(), "native:ibc/something/axlusdc".to_string());
-                assert_eq!(stream.start_time, suite.get_time_as_timestamp());
+                assert_eq!(stream.start_time.seconds(), suite.get_time_as_timestamp().seconds());
                 assert_eq!(
-                    stream.stop_time,
-                    suite.get_time_as_timestamp().plus_seconds(100)
+                    stream.stop_time.seconds(),
+                    suite.get_time_as_timestamp().plus_seconds(100).seconds()
                 );
             }
             None => {
@@ -138,10 +138,10 @@ mod basic_use_cases {
                 assert_eq!(stream.sender, funder.to_string());
                 assert_eq!(stream.deposit, Uint128::from(100u128));
                 assert_eq!(stream.token_addr.to_string(), "native:ibc/something/axlusdc".to_string());
-                assert_eq!(stream.start_time, suite.get_time_as_timestamp());
+                assert_eq!(stream.start_time.seconds(), suite.get_time_as_timestamp().seconds());
                 assert_eq!(
-                    stream.stop_time,
-                    suite.get_time_as_timestamp().plus_seconds(100)
+                    stream.stop_time.seconds(),
+                    suite.get_time_as_timestamp().plus_seconds(100).seconds()
                 );
             }
             None => {
@@ -151,6 +151,13 @@ mod basic_use_cases {
 
         // Pass some time so the recipient can withdraw something
         suite.update_time(50);
+
+        // Verify we have some claimable amount
+        let claimable_amount = suite
+            .query_stream_claimable_amount(1u64)
+            .unwrap();
+        assert_eq!(claimable_amount, 50u128);
+
         // Attempt to withdraw with recipient
 
         suite
@@ -210,8 +217,8 @@ mod basic_use_cases {
                     recipient.clone(),
                     100u128,
                     "ibc/something/axlusdc",
-                    suite.get_time_as_timestamp(),
-                    suite.get_time_as_timestamp().plus_seconds(100),
+                    suite.get_time_as_timestamp().seconds(),
+                    suite.get_time_as_timestamp().plus_seconds(100).seconds(),
                     &[Coin {
                         denom: "ibc/something/axlusdc".to_string(),
                         amount: Uint128::from(100u128),
@@ -304,8 +311,8 @@ mod views_with_mock_data {
                     recipient.clone(),
                     100u128,
                     "ibc/something/axlusdc",
-                    suite.get_time_as_timestamp(),
-                    suite.get_time_as_timestamp().plus_seconds(100),
+                    suite.get_time_as_timestamp().seconds(),
+                    suite.get_time_as_timestamp().plus_seconds(100).seconds(),
                     &[Coin {
                         denom: "ibc/something/axlusdc".to_string(),
                         amount: Uint128::from(100u128),
@@ -346,8 +353,8 @@ mod views_with_mock_data {
                     recipient.clone(),
                     100u128,
                     "ibc/something/axlusdc",
-                    suite.get_time_as_timestamp(),
-                    suite.get_time_as_timestamp().plus_seconds(100),
+                    suite.get_time_as_timestamp().seconds(),
+                    suite.get_time_as_timestamp().plus_seconds(100).seconds(),
                     &[Coin {
                         denom: "ibc/something/axlusdc".to_string(),
                         amount: Uint128::from(100u128),
@@ -371,11 +378,11 @@ mod views_with_mock_data {
         assert_eq!(streams[0].recipient, recipients[0].to_string());
         assert_eq!(streams[0].sender, funder.to_string());
         assert_eq!(streams[0].deposit, Uint128::from(100u128));
-        assert_eq!(streams[0].token_addr.to_string(), "ibc/something/axlusdc".to_string());
-        assert_eq!(streams[0].start_time, suite.get_time_as_timestamp());
+        assert_eq!(streams[0].token_addr.to_string(),"native:ibc/something/axlusdc".to_string());
+        assert_eq!(streams[0].start_time.seconds(), suite.get_time_as_timestamp().seconds());
         assert_eq!(
-            streams[0].stop_time,
-            suite.get_time_as_timestamp().plus_seconds(100)
+            streams[0].stop_time.seconds(),
+            suite.get_time_as_timestamp().plus_seconds(100).seconds()
         );
     }
 
@@ -404,8 +411,8 @@ mod views_with_mock_data {
                     recipient.clone(),
                     100u128,
                     "ibc/something/axlusdc",
-                    suite.get_time_as_timestamp(),
-                    suite.get_time_as_timestamp().plus_seconds(100),
+                    suite.get_time_as_timestamp().seconds(),
+                    suite.get_time_as_timestamp().plus_seconds(100).seconds(),
                     &[Coin {
                         denom: "ibc/something/axlusdc".to_string(),
                         amount: Uint128::from(100u128),
@@ -423,8 +430,8 @@ mod views_with_mock_data {
                 recipients[1].clone(),
                 100u128,
                 "ibc/something/axlusdc",
-                suite.get_time_as_timestamp(),
-                suite.get_time_as_timestamp().plus_seconds(100),
+                suite.get_time_as_timestamp().seconds(),
+                suite.get_time_as_timestamp().plus_seconds(100).seconds(),
                 &[Coin {
                     denom: "ibc/something/axlusdc".to_string(),
                     amount: Uint128::from(100u128),
@@ -447,11 +454,11 @@ mod views_with_mock_data {
         assert_eq!(streams[0].recipient, recipients[1].to_string());
         assert_eq!(streams[0].sender, funder.to_string());
         assert_eq!(streams[0].deposit, Uint128::from(100u128));
-        assert_eq!(streams[0].token_addr.to_string(), "ibc/something/axlusdc".to_string());
-        assert_eq!(streams[0].start_time, suite.get_time_as_timestamp());
+        assert_eq!(streams[0].token_addr.to_string(), "native:ibc/something/axlusdc".to_string());
+        assert_eq!(streams[0].start_time.seconds(), suite.get_time_as_timestamp().seconds());
         assert_eq!(
-            streams[0].stop_time,
-            suite.get_time_as_timestamp().plus_seconds(100)
+            streams[0].stop_time.seconds(),
+            suite.get_time_as_timestamp().plus_seconds(100).seconds()
         );
     }
 
@@ -486,8 +493,8 @@ mod views_with_mock_data {
                     recipient.clone(),
                     100u128,
                     "ibc/something/axlusdc",
-                    suite.get_time_as_timestamp(),
-                    suite.get_time_as_timestamp().plus_seconds(100),
+                    suite.get_time_as_timestamp().seconds(),
+                    suite.get_time_as_timestamp().plus_seconds(100).seconds(),
                     &[Coin {
                         denom: "ibc/something/axlusdc".to_string(),
                         amount: Uint128::from(100u128),
@@ -519,8 +526,8 @@ mod views_with_mock_data {
                 recipients[1].clone(),
                 100u128,
                 "ibc/something/axlusdc",
-                suite.get_time_as_timestamp(),
-                suite.get_time_as_timestamp().plus_seconds(100),
+                suite.get_time_as_timestamp().seconds(),
+                suite.get_time_as_timestamp().plus_seconds(100).seconds(),
                 &[Coin {
                     denom: "ibc/something/axlusdc".to_string(),
                     amount: Uint128::from(100u128),
@@ -587,8 +594,8 @@ mod curve_tests {
                 recipients[0].clone(),
                 100u128,
                 "ibc/something/axlusdc",
-                suite.get_time_as_timestamp(),
-                suite.get_time_as_timestamp().plus_seconds(100),
+                suite.get_time_as_timestamp().seconds(),
+                suite.get_time_as_timestamp().plus_seconds(100).seconds(),
                 &[Coin {
                     denom: "ibc/something/axlusdc".to_string(),
                     amount: Uint128::from(100u128),
@@ -612,7 +619,7 @@ mod curve_tests {
                 assert_eq!(stream.recipient, recipients[0].to_string());
                 assert_eq!(stream.sender, funder.to_string());
                 assert_eq!(stream.deposit, Uint128::from(100u128));
-                assert_eq!(stream.token_addr.to_string(), "ibc/something/axlusdc".to_string());
+                assert_eq!(stream.token_addr.to_string(), "native:ibc/something/axlusdc".to_string());
                 assert_eq!(stream.remaining_balance, Uint128::from(100u128));
             }
             None => {
@@ -642,7 +649,7 @@ mod curve_tests {
                 assert_eq!(stream.recipient, recipients[0].to_string());
                 assert_eq!(stream.sender, funder.to_string());
                 assert_eq!(stream.deposit, Uint128::from(100u128));
-                assert_eq!(stream.token_addr.to_string(),  "ibc/something/axlusdc".to_string());
+                assert_eq!(stream.token_addr.to_string(),  "native:ibc/something/axlusdc".to_string());
                 assert_eq!(stream.remaining_balance, Uint128::from(80u128));
             }
             None => {
