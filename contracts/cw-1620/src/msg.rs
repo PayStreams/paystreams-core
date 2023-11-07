@@ -51,7 +51,7 @@ pub enum QueryMsg {
     #[returns(CountResponse)]
     StreamCount {},
     #[returns(StreamsResponse)]
-    StreamsByPayee {
+    StreamsByRecipient {
         payee: String,
         reverse: Option<bool>,
         limit: Option<Uint128>,

@@ -10,6 +10,7 @@ use serde::de;
 use wynd_utils::Curve;
 use cw20::Cw20ReceiveMsg;
 
+use crate::curve_helpers;
 use crate::error::ContractError;
 use crate::msg::{
     CountResponse, ExecuteMsg, InstantiateMsg, LookupStreamResponse, QueryMsg, StreamsResponse, Cw20HookMsg, StreamClaimableAmtResponse,
@@ -109,13 +110,19 @@ pub fn execute(
         ExecuteMsg::CancelStream { stream_idx } => {
             // Load stream, verify sender is the sender of stream, and then delete stream
             let stream = payment_streams().load(deps.storage, &stream_idx.to_string())?;
-            if stream.sender != info.sender {
+            // Only the stream sender or recipient can cancel a stream
+            // also the sender cannot cancel a stream that has already started
+            if info.sender != stream.sender && info.sender != stream.recipient {
+                return Err(ContractError::Unauthorized {});
+            }
+
+            if env.block.time > stream.start_time && info.sender == stream.sender {
                 return Err(ContractError::Unauthorized {});
             }
 
             // Check it doesn't exceed available
             let available_bal_for_stream: Uint128 =
-                avail_balance_of(stream.clone(), env).unwrap_or_else(|_| Uint128::zero());
+                curve_helpers::avail_balance_of(stream.clone(), env).unwrap_or_else(|_| Uint128::zero());
 
             let mut messages: Vec<CosmosMsg> = vec![];
             let denom = match stream.token_addr {
@@ -218,7 +225,9 @@ pub fn try_create_stream(
     match stream_type {
         StreamType::Basic => {
             // Calculate rate_per_second with error handling
-            let rate_per_second = deposit.checked_div(Uint128::from(duration)).map_err(|_| ContractError::DivisionByZero {})?;
+            // let rate_per_second = deposit.checked_div(Uint128::from(duration)).map_err(|_| ContractError::DivisionByZero {})?;
+
+            let rate_per_second = curve_helpers::calc_rate_per_second(duration, deposit).unwrap();
             let stream_data = PaymentStream {
                 stream_idx,
                 recipient: recipient.clone(),
@@ -250,7 +259,7 @@ pub fn try_create_stream(
             // Verify the provided curve is valid, in this case we want to make sure its the right curve type and its monotonically increasing
             let curve = stream_data.curve.unwrap();
             curve.validate_monotonic_increasing()?;
-
+            curve_helpers::validate_curve(StreamType::LinearCurveBased, &curve)?;
             match curve.clone() {
                 Curve::Constant { y } => {
                     // We can get rate per second in the case of a constant curve by dividing the deposit by the duration
@@ -323,6 +332,7 @@ pub fn try_create_stream(
     Ok(Response::new().add_attribute("method", "try_create_stream"))
 }
 
+
 pub fn claim_from_stream(
     deps: DepsMut,
     info: MessageInfo,
@@ -333,7 +343,7 @@ pub fn claim_from_stream(
     stream_idx: Option<u64>,
 ) -> Result<Response, ContractError> {
     let recipient = deps.api.addr_validate(&recipient)?;
-
+    
     // Check amount is valid
     if amount == Uint128::zero() {
         return Err(ContractError::InvalidAmount {});
@@ -344,20 +354,24 @@ pub fn claim_from_stream(
     } else {
         STREAMS.load(deps.storage, (&recipient, &info.sender))?
     };
+    // Only the recipient can perform a claim from stream
+    if info.sender != paystream.recipient {
+        return Err(ContractError::Unauthorized {});
+    }
 
-    println!("Stream {:?}", paystream);
 
     // Check it doesn't exceed available
     let available_bal_for_stream: Uint128 =
-        avail_balance_of(paystream.clone(), env).unwrap_or_else(|_| Uint128::zero());
-    println!(
-        "Amount {:?} Balance: {:?} Remaining from stream {:?}",
-        amount, available_bal_for_stream, paystream.remaining_balance
-    );
-
+        curve_helpers::avail_balance_of(paystream.clone(), env).unwrap_or_else(|_| Uint128::zero());
+    // println!(
+    //     "Amount {:?} Balance: {:?} Remaining from stream {:?}",
+    //     amount, available_bal_for_stream, paystream.remaining_balance
+    // );
+    // If they requested more than is available from this stream
     if amount > available_bal_for_stream {
         return Err(ContractError::NotEnoughAvailableBalance {});
     }
+    // If they requested more than is remaining from the total stream
     if amount > paystream.remaining_balance {
         return Err(ContractError::NotEnoughAvailableFunds {});
     }
@@ -367,9 +381,7 @@ pub fn claim_from_stream(
         to_address: recipient.to_string(),
         amount: vec![Coin { denom, amount }],
     });
-    println!("Remaining balance {:?}", paystream.remaining_balance);
     paystream.remaining_balance = paystream.remaining_balance.checked_sub(amount)?;
-    println!("Remaining balance {:?}", paystream.remaining_balance);
 
     STREAMS.save(deps.storage, (&recipient, &info.sender), &paystream)?;
     payment_streams().save(
@@ -383,97 +395,14 @@ pub fn claim_from_stream(
         .add_message(payout_msg))
 }
 
-pub fn avail_balance_of(stream: PaymentStream, env: Env) -> Result<Uint128, ContractError> {
-    // Get the time delta
-    let delta = delta(stream.clone(), env.clone())?;
-    println!("Stream {:?}", stream);
-    match stream.curve {
-        Some(curve) => {
-            match curve.clone() {
-                Curve::SaturatingLinear(s) => {
-                    let rec_amt =
-                        stream.deposit.u128() - curve.value(env.block.time.seconds()).u128();
-                    let rec_bal = Uint128::from(rec_amt);
-                    let amount_available = stream.deposit.checked_sub(stream.remaining_balance)?;
-                    let new_balance = rec_bal.checked_sub(amount_available)?;
-
-                    // Calc this better
-
-                    return Ok(new_balance);
-                }
-                _ => {
-                    return Err(ContractError::Unauthorized {});
-                }
-            };
-        }
-        None => {
-            // Use delta to get the balance that should be available
-            let rec_bal = Uint128::from(delta).checked_mul(stream.rate_per_second)?;
-            // println!("Delta: {:?}, Recipient Balance: {:?}", delta, rec_bal);
-
-            if stream.deposit >= stream.remaining_balance {
-                // println!("Deposit: {:?}, Remaining: {:?}", stream.deposit , stream.remaining_balance);
-                let amount_available = stream.deposit.checked_sub(stream.remaining_balance)?;
-                let new_balance = rec_bal.checked_sub(amount_available)?;
-                // println!("New balance {:?}", new_balance);
-                return Ok(new_balance);
-            }
-            Ok(Uint128::from(0u128))
-        }
-    }
-}
-
-pub fn delta(stream: PaymentStream, env: Env) -> StdResult<u64> {
-    if env.block.time <= stream.start_time {
-        return Ok(0);
-    }
-    if env.block.time < stream.stop_time {
-        return Ok(env
-            .block
-            .time
-            .minus_seconds(stream.start_time.seconds())
-            .seconds());
-    }
-    let duration = stream
-        .stop_time
-        .seconds()
-        .checked_sub(stream.start_time.seconds())
-        .ok_or(ContractError::Unauthorized {})
-        .unwrap();
-    Ok(Timestamp::from_seconds(duration).seconds())
-}
-
-pub fn deltaOf(deps:Deps, env: Env,stream_id: u64) -> StdResult<u64> {
-    // Get the stream from storage
-    let stream = payment_streams().load(deps.storage, &stream_id.to_string())?;
-    // If the stream hasn't started yet, return 0
-    if env.block.time <= stream.start_time {
-        return Ok(0);
-    }
-    // If the stream has started but not ended, return the delta
-    if env.block.time < stream.stop_time {
-        return Ok(env
-            .block
-            .time
-            .minus_seconds(stream.start_time.seconds())
-            .seconds());
-    }
-    // If the stream has ended, return the duration
-    let duration = stream
-        .stop_time
-        .seconds()
-        .checked_sub(stream.start_time.seconds())
-        .unwrap();
-    Ok(Timestamp::from_seconds(duration).seconds())
-}
 
 #[cfg_attr(not(feature = "library"), entry_point)]
 pub fn query(deps: Deps, env: Env, msg: QueryMsg) -> StdResult<Binary> {
     match msg {
         QueryMsg::LookupStream { payer, payee } => to_binary(&query_stream(deps, payer, payee)?),
         QueryMsg::StreamCount {} => to_binary(&query_stream_count(deps)?),
-        QueryMsg::StreamsByPayee {
-            payee,
+        QueryMsg::StreamsByRecipient {
+            payee: recipient,
             reverse,
             limit,
         } => {
@@ -482,7 +411,7 @@ pub fn query(deps: Deps, env: Env, msg: QueryMsg) -> StdResult<Binary> {
                 Some(true) => Order::Descending,
             };
 
-            to_binary(&query_streams_by_payee(deps, payee, order, limit)?)
+            to_binary(&query_streams_by_recipient(deps, recipient, order, limit)?)
         }
         QueryMsg::StreamsBySender {
             sender,
@@ -514,7 +443,7 @@ fn query_stream(deps: Deps, payer: String, payee: String) -> StdResult<LookupStr
     Ok(LookupStreamResponse { stream: state })
 }
 
-pub fn query_streams_by_payee(
+pub fn query_streams_by_recipient(
     deps: Deps,
     payee: String,
     order: Order,
@@ -568,14 +497,16 @@ pub fn query_stream_amount_claimable(deps: Deps, env: Env,stream_idx: u64) -> St
     // Get 1 from payment_streams
     let stream = payment_streams().load(deps.storage, &stream_idx.to_string())?;
     // Get the time delta
-    let delta = delta(stream.clone(), env.clone())?;
+    let delta = curve_helpers::delta(stream.clone(), env.clone())?;
     // Use delta to get the balance that should be available
     let rec_bal = Uint128::from(delta).checked_mul(stream.rate_per_second)?;
     // println!("Delta: {:?}, Recipient Balance: {:?}", delta, rec_bal);
-
+    // Check it doesn't exceed available
+    let available_bal_for_stream: Uint128 =
+        curve_helpers::avail_balance_of(stream.clone(), env).unwrap_or_else(|_| Uint128::zero());
     Ok(StreamClaimableAmtResponse {
         stream,
-        amount_available: rec_bal,
+        amount_available: available_bal_for_stream,
     })
 }
 
@@ -763,14 +694,15 @@ mod tests {
             amount: Uint128::new(90),
             denom: String::from("axlusdc"),
             recipient: payee.sender.to_string(),
-            stream_idx: None,
+            stream_idx: Some(1),
         };
         let execute_res =
-            execute(deps.as_mut(), env.clone(), payer.clone(), withdraw_msg).unwrap_err();
+            execute(deps.as_mut(), env.clone(), payee.clone(), withdraw_msg).unwrap_err();
 
         match execute_res {
             ContractError::NotEnoughAvailableBalance {} => {}
-            _ => panic!("DO NOT ENTER HERE"),
+            e => {
+                                panic!("DO NOT ENTER HERE")},
         }
 
         env.block.time = Timestamp::from_seconds(env.block.time.seconds() + 10);
@@ -778,9 +710,9 @@ mod tests {
             amount: Uint128::new(10),
             denom: String::from("axlusdc"),
             recipient: payee.sender.to_string(),
-            stream_idx: None,
+            stream_idx: Some(1),
         };
-        let execute_res = execute(deps.as_mut(), env.clone(), payer.clone(), withdraw_msg).unwrap();
+        let execute_res = execute(deps.as_mut(), env.clone(), payee.clone(), withdraw_msg).unwrap();
         assert_eq!(1, execute_res.messages.len());
 
         // Verify the payee has indeed been paid by verifying the attached bank submessage
@@ -800,10 +732,10 @@ mod tests {
             amount: Uint128::new(90),
             denom: String::from("axlusdc"),
             recipient: payee.sender.to_string(),
-            stream_idx: None,
+            stream_idx: Some(1),
         };
         let execute_res =
-            execute(deps.as_mut(), env.clone(), payer.clone(), withdraw_msg).unwrap_err();
+            execute(deps.as_mut(), env.clone(), payee.clone(), withdraw_msg).unwrap_err();
 
         match execute_res {
             ContractError::NotEnoughAvailableBalance {} => {}
@@ -817,9 +749,9 @@ mod tests {
             amount: Uint128::new(90),
             denom: String::from("axlusdc"),
             recipient: payee.sender.to_string(),
-            stream_idx: None,
+            stream_idx: Some(1),
         };
-        let execute_res = execute(deps.as_mut(), env.clone(), payer.clone(), withdraw_msg).unwrap();
+        let execute_res = execute(deps.as_mut(), env.clone(), payee.clone(), withdraw_msg).unwrap();
 
         assert_eq!(1, execute_res.messages.len());
 
@@ -842,9 +774,9 @@ mod tests {
             amount: Uint128::new(10),
             denom: String::from("axlusdc"),
             recipient: payee.sender.to_string(),
-            stream_idx: None,
+            stream_idx: Some(1),
         };
-        let execute_res = execute(deps.as_mut(), env.clone(), payer, withdraw_msg).unwrap_err();
+        let execute_res = execute(deps.as_mut(), env.clone(), payee, withdraw_msg).unwrap_err();
 
         match execute_res {
             ContractError::NotEnoughAvailableBalance {} => {}

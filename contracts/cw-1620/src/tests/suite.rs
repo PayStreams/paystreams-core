@@ -172,7 +172,7 @@ impl Suite {
     }
 
     pub fn query_streams_by_payee(&mut self, payee: Addr) -> StdResult<StreamsResponse> {
-        let msg = crate::msg::QueryMsg::StreamsByPayee {
+        let msg = crate::msg::QueryMsg::StreamsByRecipient {
             payee: payee.to_string(),
             reverse: None,
             limit: None,
