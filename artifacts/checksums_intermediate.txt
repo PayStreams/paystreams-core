@@ -1,0 +1,1 @@
+b242272f5158533a778ccb0a1ca960135746b47785d18c9ea36c81037c8cbb35  target/wasm32-unknown-unknown/release/cw_1620.wasm

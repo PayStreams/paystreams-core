@@ -62,7 +62,7 @@ pub struct PaymentStream {
     pub recipient: Addr,
     pub sender: Addr,
     pub token_addr: AssetInfoBase<Addr>,
-    pub is_entity: bool,
+    pub is_closed: bool,
     pub curve: Option<Curve>,
 }
 

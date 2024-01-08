@@ -107,7 +107,6 @@ impl Suite {
                 block.height += time_update / 5;
             })
     }
-    
 
     pub fn query_balance(&self, user: &str, denom: &str) -> AnyResult<u128> {
         Ok(self.app.wrap().query_balance(user, denom)?.amount.u128())
@@ -131,7 +130,7 @@ impl Suite {
             recipient: recipient.to_string(),
             asset: Asset {
                 amount: deposit.into(),
-                info: AssetInfo::Native(token_addr.to_string())
+                info: AssetInfo::Native(token_addr.to_string()),
             },
             start_time: start_time,
             stop_time: stop_time,

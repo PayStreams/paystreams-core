@@ -27,7 +27,7 @@ pub enum ContractError {
 
     #[error("Could not find a stream with provided index or address")]
     StreamNotFound {},
-    
+
     #[error("Attempted to divide by zero")]
     DivisionByZero {},
 

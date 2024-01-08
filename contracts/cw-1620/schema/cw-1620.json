@@ -675,7 +675,7 @@
           "type": "object",
           "required": [
             "deposit",
-            "is_entity",
+            "is_closed",
             "rate_per_second",
             "recipient",
             "remaining_balance",
@@ -699,7 +699,7 @@
             "deposit": {
               "$ref": "#/definitions/Uint128"
             },
-            "is_entity": {
+            "is_closed": {
               "type": "boolean"
             },
             "rate_per_second": {
@@ -928,7 +928,7 @@
           "type": "object",
           "required": [
             "deposit",
-            "is_entity",
+            "is_closed",
             "rate_per_second",
             "recipient",
             "remaining_balance",
@@ -952,7 +952,7 @@
             "deposit": {
               "$ref": "#/definitions/Uint128"
             },
-            "is_entity": {
+            "is_closed": {
               "type": "boolean"
             },
             "rate_per_second": {
@@ -1195,7 +1195,7 @@
           "type": "object",
           "required": [
             "deposit",
-            "is_entity",
+            "is_closed",
             "rate_per_second",
             "recipient",
             "remaining_balance",
@@ -1219,7 +1219,7 @@
             "deposit": {
               "$ref": "#/definitions/Uint128"
             },
-            "is_entity": {
+            "is_closed": {
               "type": "boolean"
             },
             "rate_per_second": {
@@ -1447,7 +1447,7 @@
           "type": "object",
           "required": [
             "deposit",
-            "is_entity",
+            "is_closed",
             "rate_per_second",
             "recipient",
             "remaining_balance",
@@ -1471,7 +1471,7 @@
             "deposit": {
               "$ref": "#/definitions/Uint128"
             },
-            "is_entity": {
+            "is_closed": {
               "type": "boolean"
             },
             "rate_per_second": {
@@ -1699,7 +1699,7 @@
           "type": "object",
           "required": [
             "deposit",
-            "is_entity",
+            "is_closed",
             "rate_per_second",
             "recipient",
             "remaining_balance",
@@ -1723,7 +1723,7 @@
             "deposit": {
               "$ref": "#/definitions/Uint128"
             },
-            "is_entity": {
+            "is_closed": {
               "type": "boolean"
             },
             "rate_per_second": {

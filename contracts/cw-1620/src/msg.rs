@@ -1,9 +1,9 @@
 use crate::state::{PaymentStream, StreamType};
 use cosmwasm_schema::{cw_serde, QueryResponses};
 use cosmwasm_std::{Timestamp, Uint128};
+use cw20::Cw20ReceiveMsg;
 use cw_asset::{Asset, AssetInfo};
 use wynd_utils::Curve;
-use cw20::Cw20ReceiveMsg;
 
 #[cw_serde]
 pub struct InstantiateMsg {

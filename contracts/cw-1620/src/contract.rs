@@ -1,26 +1,26 @@
 #[cfg(not(feature = "library"))]
 use cosmwasm_std::entry_point;
 use cosmwasm_std::{
-    to_binary, BankMsg, Binary, Coin, CosmosMsg, Deps, DepsMut, Env, MessageInfo, Order, Response,
-    StdResult, Timestamp, Uint128, Addr, from_binary, Empty,
+    from_binary, to_binary, Addr, BankMsg, Binary, Coin, CosmosMsg, Deps, DepsMut, Empty, Env,
+    MessageInfo, Order, Response, StdResult, Timestamp, Uint128,
 };
 use cw2::set_contract_version;
+use cw20::Cw20ReceiveMsg;
 use cw_utils::may_pay;
 use serde::de;
 use wynd_utils::Curve;
-use cw20::Cw20ReceiveMsg;
 
 use crate::curve_helpers;
 use crate::error::ContractError;
 use crate::msg::{
-    CountResponse, ExecuteMsg, InstantiateMsg, LookupStreamResponse, QueryMsg, StreamsResponse, Cw20HookMsg, StreamClaimableAmtResponse,
+    CountResponse, Cw20HookMsg, ExecuteMsg, InstantiateMsg, LookupStreamResponse, QueryMsg,
+    StreamClaimableAmtResponse, StreamsResponse,
 };
 use crate::state::{
     payment_streams, ConfigState, PaymentStream, StreamData, StreamType, LAST_STREAM_IDX, STATE,
     STREAMS,
 };
 use cw_asset::{Asset, AssetInfo, AssetInfoBase, AssetInfoKey};
-
 
 // version info for migration info
 const CONTRACT_NAME: &str = "crates.io:cw-1620";
@@ -53,8 +53,6 @@ pub fn instantiate(
 
 #[cfg_attr(not(feature = "library"), entry_point)]
 pub fn migrate(deps: DepsMut, _env: Env, msg: Empty) -> Result<Response, ContractError> {
-    
-
     Ok(Response::new())
 }
 
@@ -74,16 +72,13 @@ pub fn execute(
             stop_time,
             stream_type,
             curve,
-        } => 
-        
-        {   
-            match asset.info.clone() {
-                AssetInfo::Native(denom) => {
-                    let deposit_amount = may_pay(&info, &denom).unwrap();
-                    if deposit_amount < asset.amount {
-                        return Err(ContractError::NotEnoughAvailableFunds {});
-                    }
-                    try_create_stream(
+        } => match asset.info.clone() {
+            AssetInfo::Native(denom) => {
+                let deposit_amount = may_pay(&info, &denom).unwrap();
+                if deposit_amount < asset.amount {
+                    return Err(ContractError::NotEnoughAvailableFunds {});
+                }
+                try_create_stream(
                     deps,
                     info,
                     recipient,
@@ -95,11 +90,9 @@ pub fn execute(
                         stream_type: stream_type,
                         curve: curve,
                     },
-                )},
-                _ => unimplemented!()
+                )
             }
-                
-            
+            _ => unimplemented!(),
         },
         ExecuteMsg::ClaimFromStream {
             recipient,
@@ -122,7 +115,8 @@ pub fn execute(
 
             // Check it doesn't exceed available
             let available_bal_for_stream: Uint128 =
-                curve_helpers::avail_balance_of(stream.clone(), env).unwrap_or_else(|_| Uint128::zero());
+                curve_helpers::avail_balance_of(stream.clone(), env)
+                    .unwrap_or_else(|_| Uint128::zero());
 
             let mut messages: Vec<CosmosMsg> = vec![];
             let denom = match stream.token_addr {
@@ -143,7 +137,12 @@ pub fn execute(
             // Pay the remaining to the sender
             let payout_msg: CosmosMsg = CosmosMsg::Bank(BankMsg::Send {
                 to_address: stream.sender.to_string(),
-                amount: vec![Coin { denom, amount: stream.remaining_balance.checked_sub(available_bal_for_stream)? }],
+                amount: vec![Coin {
+                    denom,
+                    amount: stream
+                        .remaining_balance
+                        .checked_sub(available_bal_for_stream)?,
+                }],
             });
             messages.push(payout_msg);
 
@@ -151,8 +150,7 @@ pub fn execute(
             Ok(Response::new()
                 .add_messages(messages)
                 .add_attribute("method", "cancel_stream"))
-            
-        },
+        }
     }
 }
 
@@ -166,11 +164,13 @@ fn receive_cw20(
     let sender = deps.api.addr_validate(&cw20_msg.sender)?;
 
     match from_binary(&cw20_msg.msg)? {
-        Cw20HookMsg::CreateStream {recipient,
+        Cw20HookMsg::CreateStream {
+            recipient,
             start_time,
             stop_time,
             stream_type,
-            curve} => {
+            curve,
+        } => {
             if cw20_msg.amount.is_zero() {
                 return Err(ContractError::InvalidAmount {});
             }
@@ -210,11 +210,14 @@ pub fn try_create_stream(
     let stop_time = stream_data.stop_time.seconds();
 
     if stop_time <= start_time {
-        return Err(ContractError::DeltaIssue { start_time: start_time, stop_time: stop_time });
+        return Err(ContractError::DeltaIssue {
+            start_time: start_time,
+            stop_time: stop_time,
+        });
     }
 
     // Get the time delta
-    let duration = stop_time - start_time;    
+    let duration = stop_time - start_time;
 
     // Unless stream_type is provided we will assume it is StreamType::Basic
     let stream_type = stream_data.stream_type.unwrap_or(StreamType::Basic);
@@ -235,7 +238,7 @@ pub fn try_create_stream(
                 token_addr: token_addr,
                 start_time: stream_data.start_time,
                 stop_time: stream_data.stop_time,
-                is_entity: false,
+                is_closed: false,
                 rate_per_second,
                 remaining_balance: deposit,
                 sender: info.sender.clone(),
@@ -271,7 +274,7 @@ pub fn try_create_stream(
                         token_addr,
                         start_time: stream_data.start_time,
                         stop_time: stream_data.stop_time,
-                        is_entity: false,
+                        is_closed: false,
                         rate_per_second,
                         remaining_balance: deposit,
                         sender: info.sender.clone(),
@@ -301,7 +304,7 @@ pub fn try_create_stream(
                         token_addr,
                         start_time: stream_data.start_time,
                         stop_time: stream_data.stop_time,
-                        is_entity: false,
+                        is_closed: false,
                         rate_per_second,
                         remaining_balance: deposit,
                         sender: info.sender.clone(),
@@ -332,7 +335,6 @@ pub fn try_create_stream(
     Ok(Response::new().add_attribute("method", "try_create_stream"))
 }
 
-
 pub fn claim_from_stream(
     deps: DepsMut,
     info: MessageInfo,
@@ -343,7 +345,7 @@ pub fn claim_from_stream(
     stream_idx: Option<u64>,
 ) -> Result<Response, ContractError> {
     let recipient = deps.api.addr_validate(&recipient)?;
-    
+
     // Check amount is valid
     if amount == Uint128::zero() {
         return Err(ContractError::InvalidAmount {});
@@ -359,7 +361,6 @@ pub fn claim_from_stream(
         return Err(ContractError::Unauthorized {});
     }
 
-
     // Check it doesn't exceed available
     let available_bal_for_stream: Uint128 =
         curve_helpers::avail_balance_of(paystream.clone(), env).unwrap_or_else(|_| Uint128::zero());
@@ -368,6 +369,10 @@ pub fn claim_from_stream(
     //     amount, available_bal_for_stream, paystream.remaining_balance
     // );
     // If they requested more than is available from this stream
+    println!(
+        "Amount: {:?}, Available: {:?}",
+        amount, available_bal_for_stream
+    );
     if amount > available_bal_for_stream {
         return Err(ContractError::NotEnoughAvailableBalance {});
     }
@@ -381,7 +386,14 @@ pub fn claim_from_stream(
         to_address: recipient.to_string(),
         amount: vec![Coin { denom, amount }],
     });
-    paystream.remaining_balance = paystream.remaining_balance.checked_sub(amount)?;
+    if amount == paystream.remaining_balance {
+        // If the amount requested is the same as the remaining balance, delete the stream
+
+        paystream.remaining_balance = 0u128.into();
+        paystream.is_closed = true;
+    } else {
+        paystream.remaining_balance = paystream.remaining_balance.checked_sub(amount)?;
+    }
 
     STREAMS.save(deps.storage, (&recipient, &info.sender), &paystream)?;
     payment_streams().save(
@@ -394,7 +406,6 @@ pub fn claim_from_stream(
         .add_attribute("method", "try_withdraw_from_stream")
         .add_message(payout_msg))
 }
-
 
 #[cfg_attr(not(feature = "library"), entry_point)]
 pub fn query(deps: Deps, env: Env, msg: QueryMsg) -> StdResult<Binary> {
@@ -426,7 +437,9 @@ pub fn query(deps: Deps, env: Env, msg: QueryMsg) -> StdResult<Binary> {
             to_binary(&query_streams_by_sender(deps, sender, order, limit)?)
         }
         QueryMsg::StreamsByIndex { index } => to_binary(&query_stream_by_index(deps, index)?),
-        QueryMsg::StreamClaimableAmount { index } => to_binary(&query_stream_amount_claimable(deps, env, index)?),
+        QueryMsg::StreamClaimableAmount { index } => {
+            to_binary(&query_stream_amount_claimable(deps, env, index)?)
+        }
     }
 }
 
@@ -493,7 +506,11 @@ pub fn query_stream_by_index(deps: Deps, stream_idx: u64) -> StdResult<StreamsRe
     })
 }
 
-pub fn query_stream_amount_claimable(deps: Deps, env: Env,stream_idx: u64) -> StdResult<StreamClaimableAmtResponse> {
+pub fn query_stream_amount_claimable(
+    deps: Deps,
+    env: Env,
+    stream_idx: u64,
+) -> StdResult<StreamClaimableAmtResponse> {
     // Get 1 from payment_streams
     let stream = payment_streams().load(deps.storage, &stream_idx.to_string())?;
     // Get the time delta
@@ -566,7 +583,8 @@ mod tests {
             asset: Asset {
                 amount: Uint128::new(100),
                 info: AssetInfo::Native("axlusdc".to_string()),
-            },            recipient: payee.sender.to_string(),
+            },
+            recipient: payee.sender.to_string(),
             start_time: env.block.time.seconds(),
             stop_time: env.block.time.plus_seconds(100).seconds(),
             stream_type: None,
@@ -702,7 +720,8 @@ mod tests {
         match execute_res {
             ContractError::NotEnoughAvailableBalance {} => {}
             e => {
-                                panic!("DO NOT ENTER HERE")},
+                panic!("DO NOT ENTER HERE")
+            }
         }
 
         env.block.time = Timestamp::from_seconds(env.block.time.seconds() + 10);
