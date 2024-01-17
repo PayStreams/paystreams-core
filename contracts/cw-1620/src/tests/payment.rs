@@ -784,7 +784,7 @@ mod views_with_mock_data {
 
 mod curve_tests {
     use cosmwasm_std::{Addr, Coin, Uint128};
-    use wynd_utils::Curve;
+    use wynd_utils::{Curve, PiecewiseLinear};
 
     use crate::{state::StreamType, tests::suite::SuiteBuilder};
 
@@ -903,6 +903,154 @@ mod curve_tests {
             .query_balance(&recipients[0].clone().to_string(), "ibc/something/axlusdc")
             .unwrap();
         assert_eq!(balance, 40u128);
+    }
+
+
+    #[test]
+    fn test_piecewise_cliff_curve() {
+        let funder = Addr::unchecked("funder");
+        let alice = Addr::unchecked("alice");
+        let bob = Addr::unchecked("bob");
+        let charlie = Addr::unchecked("charlie");
+        let recipients = vec![alice, bob, charlie];
+        let mut suite = SuiteBuilder::new()
+            .with_funds(
+                &funder.to_string(),
+                &[Coin {
+                    denom: "ibc/something/axlusdc".to_string(),
+                    amount: Uint128::from(1000000000u128),
+                }],
+            )
+            .build();
+
+        // Create a PiecewiseLinear curve which represents a cliff curve
+        // First step is 20 seconds, second step is 100 seconds and the value is 100
+        // Between 0 and 20 seconds the value is 0
+        // Between 20 and 100 seconds the value is 100
+        // After 100 seconds the value is 100
+        let curve = Curve::PiecewiseLinear(PiecewiseLinear {
+            steps: vec![
+                (suite.get_time_as_timestamp().seconds(), 0u128.into()),
+                (suite.get_time_as_timestamp().seconds() + 20, 0u128.into()),
+                (suite.get_time_as_timestamp().seconds() + 100, 100u128.into()),
+            ],
+        });
+
+        // Create a stream with a linear curve
+        suite
+            .create_stream(
+                funder.clone(),
+                recipients[0].clone(),
+                100u128,
+                "ibc/something/axlusdc",
+                suite.get_time_as_timestamp().seconds(),
+                suite.get_time_as_timestamp().plus_seconds(100).seconds(),
+                &[Coin {
+                    denom: "ibc/something/axlusdc".to_string(),
+                    amount: Uint128::from(100u128),
+                }],
+                Some(StreamType::CliffCurveBased),
+                Some(curve),
+                
+            )
+            .unwrap();
+
+        // Advance time 20% of the way through the streams
+        suite.update_time(20);
+
+        let claimable_amount_halfway = suite.query_stream_claimable_amount(1u64).unwrap();
+        assert_eq!(
+            claimable_amount_halfway,
+            Uint128::from(0u128).u128(),
+            "Should be 0 due to rounding down"
+        );
+
+        // Verify that the recipient has withdrawn something
+        let created_stream = suite.query_stream_by_index(1u64).unwrap().streams.pop();
+
+        match created_stream {
+            Some(stream) => {
+                assert_eq!(stream.recipient, recipients[0].to_string());
+                assert_eq!(stream.sender, funder.to_string());
+                assert_eq!(stream.deposit, Uint128::from(100u128));
+                assert_eq!(
+                    stream.token_addr.to_string(),
+                    "native:ibc/something/axlusdc".to_string()
+                );
+                assert_eq!(stream.remaining_balance, Uint128::from(100u128));
+            }
+            None => {
+                panic!("Stream was not created");
+            }
+        }
+
+        // Advance time 20% of the way through the streams
+        suite.update_time(20);
+
+        let claimable_amount_halfway = suite.query_stream_claimable_amount(1u64).unwrap();
+        assert_eq!(
+            claimable_amount_halfway,
+            Uint128::from(25u128).u128(),
+            "Should be 0 due to rounding down"
+        );
+
+        // Attempt to withdraw
+        suite
+            .withdraw_from_stream(
+                recipients[0].clone(),
+                25u128,
+                "ibc/something/axlusdc",
+                Some(1u64),
+            )
+            .unwrap();
+
+        // Verify that the recipient has withdrawn something
+
+        let created_stream = suite.query_stream_by_index(1u64).unwrap().streams.pop();
+
+        match created_stream {
+            Some(stream) => {
+                assert_eq!(stream.recipient, recipients[0].to_string());
+                assert_eq!(stream.sender, funder.to_string());
+                assert_eq!(stream.deposit, Uint128::from(100u128));
+                assert_eq!(
+                    stream.token_addr.to_string(),
+                    "native:ibc/something/axlusdc".to_string()
+                );
+                assert_eq!(stream.remaining_balance, Uint128::from(75u128));
+            }
+            None => {
+                panic!("Stream was not created");
+            }
+        }
+
+        // Verify the balance of recipient is 40
+        let balance = suite
+            .query_balance(&recipients[0].clone().to_string(), "ibc/something/axlusdc")
+            .unwrap();
+        assert_eq!(balance, 25u128);
+
+        // Advance time 20% of the way through the streams
+
+        suite.update_time(80);
+
+        // Attempt to withdraw
+
+        suite
+            .withdraw_from_stream(
+                recipients[0].clone(),
+                75u128,
+                "ibc/something/axlusdc",
+                Some(1u64),
+            )
+            .unwrap();
+
+        // Verify the balance of recipient is 40
+        let balance = suite
+            .query_balance(&recipients[0].clone().to_string(), "ibc/something/axlusdc")
+            .unwrap();
+        assert_eq!(balance, 100u128);
+        
     }
 }
 

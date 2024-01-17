@@ -809,10 +809,14 @@
       "type": "object",
       "required": [
         "amount_available",
+        "amount_streamed",
         "stream"
       ],
       "properties": {
         "amount_available": {
+          "$ref": "#/definitions/Uint128"
+        },
+        "amount_streamed": {
           "$ref": "#/definitions/Uint128"
         },
         "stream": {

@@ -225,11 +225,9 @@ pub fn try_create_stream(
     let stream_idx = LAST_STREAM_IDX.load(deps.storage)? + 1;
 
     // Only stream type is supported right now
-    match stream_type {
+    let stream_data = match stream_type {
         StreamType::Basic => {
             // Calculate rate_per_second with error handling
-            // let rate_per_second = deposit.checked_div(Uint128::from(duration)).map_err(|_| ContractError::DivisionByZero {})?;
-
             let rate_per_second = curve_helpers::calc_rate_per_second(duration, deposit).unwrap();
             let stream_data = PaymentStream {
                 stream_idx,
@@ -244,19 +242,7 @@ pub fn try_create_stream(
                 sender: info.sender.clone(),
                 curve: None,
             };
-            STATE.update(deps.storage, |mut state| -> Result<_, ContractError> {
-                state.count += 1;
-                Ok(state)
-            })?;
-            payment_streams().save(
-                deps.storage,
-                stream_data.stream_idx.to_string().as_ref(),
-                &stream_data,
-            )?;
-            payment_streams().load(deps.storage, &stream_data.stream_idx.to_string())?;
-            STREAMS.save(deps.storage, (&recipient, &info.sender), &stream_data)?;
-            LAST_STREAM_IDX.save(deps.storage, &stream_idx)?;
-            println!("Stream created: {:?}", stream_data);
+            stream_data
         }
         StreamType::LinearCurveBased => {
             // Verify the provided curve is valid, in this case we want to make sure its the right curve type and its monotonically increasing
@@ -280,19 +266,8 @@ pub fn try_create_stream(
                         sender: info.sender.clone(),
                         curve: Some(curve),
                     };
-                    STATE.update(deps.storage, |mut state| -> Result<_, ContractError> {
-                        state.count += 1;
-                        Ok(state)
-                    })?;
-                    payment_streams().save(
-                        deps.storage,
-                        stream_data.stream_idx.to_string().as_ref(),
-                        &stream_data,
-                    )?;
-                    payment_streams().load(deps.storage, &stream_data.stream_idx.to_string())?;
-                    STREAMS.save(deps.storage, (&recipient, &info.sender), &stream_data)?;
-                    LAST_STREAM_IDX.save(deps.storage, &stream_idx)?;
                     println!("Stream created: {:?}", stream_data);
+                    stream_data
                 }
                 Curve::SaturatingLinear(s) => {
                     // We can get rate per second in the case of a constant curve by dividing the deposit by the duration
@@ -310,19 +285,36 @@ pub fn try_create_stream(
                         sender: info.sender.clone(),
                         curve: Some(curve),
                     };
-                    STATE.update(deps.storage, |mut state| -> Result<_, ContractError> {
-                        state.count += 1;
-                        Ok(state)
-                    })?;
-                    payment_streams().save(
-                        deps.storage,
-                        stream_data.stream_idx.to_string().as_ref(),
-                        &stream_data,
-                    )?;
-                    payment_streams().load(deps.storage, &stream_data.stream_idx.to_string())?;
-                    STREAMS.save(deps.storage, (&recipient, &info.sender), &stream_data)?;
-                    LAST_STREAM_IDX.save(deps.storage, &stream_idx)?;
                     println!("Stream created: {:?}", stream_data);
+                    stream_data
+                }
+                _ => {
+                    return Err(ContractError::Unauthorized {});
+                }
+            }
+        }
+        StreamType::CliffCurveBased => {
+            let curve = stream_data.curve.unwrap();
+            curve.validate_monotonic_increasing()?;
+            curve_helpers::validate_curve(StreamType::CliffCurveBased, &curve)?;
+            match curve.clone(){
+                Curve::PiecewiseLinear(p) => {
+                    // We can get rate per second in the case of a constant curve by dividing the deposit by the duration
+                    let stream_data = PaymentStream {
+                        stream_idx,
+                        recipient: recipient.clone(),
+                        deposit,
+                        token_addr,
+                        start_time: stream_data.start_time,
+                        stop_time: stream_data.stop_time,
+                        is_closed: false,
+                        rate_per_second: 0u128.into(),
+                        remaining_balance: deposit,
+                        sender: info.sender.clone(),
+                        curve: Some(curve),
+                    };
+                    println!("Stream created: {:?}", stream_data);
+                    stream_data
                 }
                 _ => {
                     return Err(ContractError::Unauthorized {});
@@ -330,7 +322,22 @@ pub fn try_create_stream(
             }
         }
         _ => return Err(ContractError::Unauthorized {}),
-    }
+    };
+
+    // Increment the stream count
+    STATE.update(deps.storage, |mut state| -> Result<_, ContractError> {
+        state.count += 1;
+        Ok(state)
+    })?;
+    // Save the stream
+    payment_streams().save(
+        deps.storage,
+        stream_data.stream_idx.to_string().as_ref(),
+        &stream_data,
+    )?;
+    // payment_streams().load(deps.storage, &stream_data.stream_idx.to_string())?;
+    // STREAMS.save(deps.storage, (&recipient, &info.sender), &stream_data)?;
+    LAST_STREAM_IDX.save(deps.storage, &stream_idx)?;
 
     Ok(Response::new().add_attribute("method", "try_create_stream"))
 }
@@ -364,10 +371,7 @@ pub fn claim_from_stream(
     // Check it doesn't exceed available
     let available_bal_for_stream: Uint128 =
         curve_helpers::avail_balance_of(paystream.clone(), env).unwrap_or_else(|_| Uint128::zero());
-    // println!(
-    //     "Amount {:?} Balance: {:?} Remaining from stream {:?}",
-    //     amount, available_bal_for_stream, paystream.remaining_balance
-    // );
+
     // If they requested more than is available from this stream
     println!(
         "Amount: {:?}, Available: {:?}",
@@ -521,16 +525,15 @@ pub fn query_stream_amount_claimable(
     // Check it doesn't exceed available
     let available_bal_for_stream: Uint128 =
         curve_helpers::avail_balance_of(stream.clone(), env).unwrap_or_else(|_| Uint128::zero());
+
+    let streamed_balance = stream.deposit.checked_sub(stream.remaining_balance)?;
     Ok(StreamClaimableAmtResponse {
         stream,
         amount_available: available_bal_for_stream,
+        amount_streamed: streamed_balance,
     })
 }
 
-// TODO: Add more queries for streams information such as
-// + how much is left to be received (all unclaimed funds ready to claim+all due funds until end of stream)
-// + how much will be paid/available at a given time (all earnings from start->given time less any claimed funds
-// + how much has been paid out (all claimed funds)
 
 #[cfg(test)]
 mod tests {

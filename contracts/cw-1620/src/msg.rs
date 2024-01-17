@@ -90,5 +90,6 @@ pub struct StreamsResponse {
 #[cw_serde]
 pub struct StreamClaimableAmtResponse {
     pub amount_available: Uint128,
+    pub amount_streamed: Uint128,
     pub stream: PaymentStream,
 }
